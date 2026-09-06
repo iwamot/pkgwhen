@@ -142,7 +142,7 @@ Exit codes:
 - Ages are measured from the current UTC time. The table shows whole days, hours below a day, and minutes below an hour; `--min-age` and `--since` are compared to the second.
 - npm: the full packument is fetched, because only it carries publish dates. For a large package that is a few megabytes, compressed in transit.
 - PyPI: a version's date is the earliest upload among its files, which is the moment uv's `exclude-newer` treats it as available. A version is marked `yanked` when any of its files is, which is how Renovate reads it. Versions with no files are left out.
-- GitHub: the date is `published_at`, which is what Renovate uses and which can trail the draft's creation by as long as the draft took to finish. Draft releases are dropped. `GITHUB_TOKEN`, `GH_TOKEN`, or `gh auth token` is used when available; without one, the API allows 60 requests an hour. Releases are read in the order GitHub returns them, newest created first, and only as many pages as the requested count needs unless a date option or `--all` is given.
+- GitHub: the date is `published_at`, which is what Renovate uses and which can trail the draft's creation by as long as the draft took to finish. Draft releases are dropped. `GITHUB_TOKEN`, `GH_TOKEN`, or `gh auth token` is used when available; without one, the API allows 60 requests an hour, and hitting that limit is reported as such rather than as a bare 403. Releases are read in the order GitHub returns them, newest created first, and only as many pages as the requested count needs unless a date option or `--all` is given.
 - Nothing is cached and nothing is written. Every call asks the registry.
 
 ## Out of scope

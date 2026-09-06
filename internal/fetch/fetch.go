@@ -12,10 +12,13 @@ import (
 
 // Response is what a GET came back with. Next is the URL of the following
 // page when the server sent a Link header with rel="next", else empty.
+// RateLimitRemaining is the X-RateLimit-Remaining header as sent, else
+// empty; GitHub uses it to say that a 403 is the hourly limit.
 type Response struct {
-	Status int
-	Body   []byte
-	Next   string
+	Status             int
+	Body               []byte
+	Next               string
+	RateLimitRemaining string
 }
 
 var client = &http.Client{Timeout: 60 * time.Second}
@@ -41,7 +44,12 @@ func Get(url string, headers map[string]string) (Response, error) {
 	if err != nil {
 		return Response{}, fmt.Errorf("reading %s: %w", url, err)
 	}
-	return Response{Status: resp.StatusCode, Body: body, Next: NextLink(resp.Header.Get("Link"))}, nil
+	return Response{
+		Status:             resp.StatusCode,
+		Body:               body,
+		Next:               NextLink(resp.Header.Get("Link")),
+		RateLimitRemaining: resp.Header.Get("X-RateLimit-Remaining"),
+	}, nil
 }
 
 var nextLink = regexp.MustCompile(`<([^>]+)>;\s*rel="next"`)

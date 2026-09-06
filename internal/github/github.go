@@ -81,6 +81,17 @@ func fromDoc(d doc) (release.Release, error) {
 	return release.Release{Version: d.TagName, Published: t, Prerelease: d.Prerelease}, nil
 }
 
+// StatusError describes a response that is neither the document nor a 404.
+// A 403 with no requests left in the hour is the limit for callers without
+// a token, and the message says how to lift it, so an agent retrying in a
+// loop can fix its own setup.
+func StatusError(url string, status int, rateLimitRemaining string) error {
+	if status == 403 && rateLimitRemaining == "0" {
+		return fmt.Errorf("github: %s: rate limited; set GITHUB_TOKEN or run `gh auth login`", url)
+	}
+	return fmt.Errorf("github: %s: HTTP %d", url, status)
+}
+
 // Headers builds the request headers, adding the token when there is one.
 func Headers(token string) map[string]string {
 	h := map[string]string{

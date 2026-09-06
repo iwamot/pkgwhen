@@ -68,7 +68,16 @@ func TestDecodeErrors(t *testing.T) {
 }
 
 func TestIsPrerelease(t *testing.T) {
-	if IsPrerelease("1.20.3") || !IsPrerelease("1.21.0-beta.1") || !IsPrerelease("2.0.0-0") {
-		t.Error("IsPrerelease")
+	for v, want := range map[string]bool{
+		"1.20.3":           false,
+		"1.21.0-beta.1":    true,
+		"2.0.0-0":          true,
+		"1.0.0+build-1":    false,
+		"1.0.0-rc.1+build": true,
+		"1.0.0+20260906":   false,
+	} {
+		if got := IsPrerelease(v); got != want {
+			t.Errorf("IsPrerelease(%q) = %v, want %v", v, got, want)
+		}
 	}
 }

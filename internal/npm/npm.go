@@ -66,7 +66,9 @@ func isDeprecated(raw json.RawMessage) bool {
 	}
 }
 
-// IsPrerelease reports whether v carries a semver prerelease part.
+// IsPrerelease reports whether v carries a semver prerelease part. Build
+// metadata after "+" is not one, and may itself contain "-".
 func IsPrerelease(v string) bool {
-	return strings.Contains(v, "-")
+	core, _, _ := strings.Cut(v, "+")
+	return strings.Contains(core, "-")
 }

@@ -1,7 +1,6 @@
 package github
 
 import (
-	"fmt"
 	"os"
 	"os/exec"
 	"strings"
@@ -42,7 +41,7 @@ func List(repo, token string, want int) (rs []release.Release, found bool, err e
 		case 404:
 			return nil, false, nil
 		default:
-			return nil, false, fmt.Errorf("github: %s: HTTP %d", url, resp.Status)
+			return nil, false, StatusError(url, resp.Status, resp.RateLimitRemaining)
 		}
 		page, err := DecodeList(resp.Body)
 		if err != nil {
@@ -74,7 +73,7 @@ func One(repo, tag, token string) (r release.Release, found bool, err error) {
 		case 404:
 			continue
 		default:
-			return release.Release{}, false, fmt.Errorf("github: %s: HTTP %d", url, resp.Status)
+			return release.Release{}, false, StatusError(url, resp.Status, resp.RateLimitRemaining)
 		}
 	}
 	return release.Release{}, false, nil
