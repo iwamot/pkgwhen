@@ -67,6 +67,25 @@ func TestDecodeOne(t *testing.T) {
 	}
 }
 
+func TestStatusError(t *testing.T) {
+	tests := []struct {
+		status    int
+		remaining string
+		want      string
+	}{
+		{403, "0", "rate limited; set GITHUB_TOKEN or run `gh auth login`"},
+		{403, "12", "HTTP 403"},
+		{403, "", "HTTP 403"},
+		{500, "0", "HTTP 500"},
+	}
+	for _, tt := range tests {
+		got := StatusError("https://api.github.com/x", tt.status, tt.remaining).Error()
+		if !strings.HasPrefix(got, "github: https://api.github.com/x: ") || !strings.Contains(got, tt.want) {
+			t.Errorf("StatusError(%d, %q) = %q, want containing %q", tt.status, tt.remaining, got, tt.want)
+		}
+	}
+}
+
 func TestHeaders(t *testing.T) {
 	h := Headers("")
 	if _, ok := h["Authorization"]; ok || h["Accept"] != "application/vnd.github+json" {
