@@ -37,12 +37,16 @@ func (r Release) Marks() []string {
 
 // Window narrows a list to a range of publish dates. MinAge keeps versions
 // published at least that long ago; Since keeps versions published within
-// that long. The Set flags tell an unset option from a zero one.
+// that long. The Set flags tell an unset option from a zero one. The Text
+// fields hold the durations as the caller typed them, so a message can quote
+// "2w" rather than the 336h it parsed to.
 type Window struct {
-	MinAge    time.Duration
-	MinAgeSet bool
-	Since     time.Duration
-	SinceSet  bool
+	MinAge     time.Duration
+	MinAgeSet  bool
+	MinAgeText string
+	Since      time.Duration
+	SinceSet   bool
+	SinceText  string
 }
 
 // Keep reports whether r falls inside the window as of now. Both edges are
@@ -66,6 +70,48 @@ func Filter(rs []Release, now time.Time, w Window) []Release {
 		}
 	}
 	return out
+}
+
+// Note explains an empty result to a caller who narrowed the list with a
+// window: which edge emptied it, and the nearest version that edge dropped.
+// It returns "" when versions remain or when no window was set, so a caller
+// can print whatever comes back and nothing otherwise.
+//
+// The nearest version is the newest one the window dropped. MinAge drops the
+// newest versions and Since the oldest, so that version is a MinAge casualty
+// whenever MinAge dropped anything, which is the half a caller can wait out.
+func Note(rs []Release, now time.Time, w Window) string {
+	if !w.MinAgeSet && !w.SinceSet {
+		return ""
+	}
+	if w.MinAgeSet && w.SinceSet && w.MinAge > w.Since {
+		return fmt.Sprintf("no version can match: --min-age %s is longer than --since %s", w.MinAgeText, w.SinceText)
+	}
+	var nearest *Release
+	for i, r := range rs {
+		if w.Keep(r, now) {
+			return ""
+		}
+		if nearest == nil || r.Published.After(nearest.Published) {
+			nearest = &rs[i]
+		}
+	}
+	tooNew := nearest != nil && w.MinAgeSet && nearest.Published.After(now.Add(-w.MinAge))
+	var head string
+	switch {
+	case tooNew || !w.SinceSet:
+		head = fmt.Sprintf("no version is older than %s", w.MinAgeText)
+	default:
+		head = fmt.Sprintf("no version published in the last %s", w.SinceText)
+	}
+	if nearest == nil {
+		return head
+	}
+	label := "latest"
+	if tooNew {
+		label = "newest"
+	}
+	return fmt.Sprintf("%s; %s is %s, published %s ago", head, label, nearest.Version, Age(now, nearest.Published))
 }
 
 // Sort orders newest first. Versions published at the same instant are
