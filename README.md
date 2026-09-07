@@ -44,7 +44,7 @@ Or download a prebuilt binary from the [Releases page](https://github.com/iwamot
 Then tell the agent to use it, in `CLAUDE.md`, `AGENTS.md`, or whichever file your agent reads:
 
 ```markdown
-To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version, `--min-age 1d` to list only versions old enough to pass a one-day release age, and `--since 30d` for versions published in the last 30 days. Rows marked `yanked`, `deprecated`, or `pre` are versions that dependency updaters usually skip, so a newer version with a mark is not a reason to expect a PR. Exit 1 means the version does not exist yet; to wait for a version you just published, rerun in a loop.
+To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version, `--min-age 1d` to list only versions old enough to pass a one-day release age, and `--since 30d` for versions published in the last 30 days. Rows marked `yanked`, `deprecated`, or `pre` are versions that dependency updaters usually skip, so a newer version with a mark is not a reason to expect a PR. Exit 1 means the package or version does not exist (yet); rerun while it exits 1, and stop and read stderr on any other exit code.
 ```
 
 That paragraph is all the agent needs. `pkgwhen --instructions` prints the same paragraph, for setup scripts and machines where this page is not at hand.
@@ -69,12 +69,12 @@ $ pkgwhen github-releases:jdx/aube@2.2.12
 v2.2.12  2026-09-06T00:44:39Z  13h
 ```
 
-A version that is not there yet. Nothing is printed on stdout, and the exit code is 1, so a loop can wait for a package that was just published:
+A version that is not there yet. Nothing is printed on stdout, and the exit code is 1, so a loop can wait for a package that was just published. The `|| [ $? -ne 1 ]` ends the loop on any other exit code, so a rate limit or an unreachable registry stops it instead of retrying forever:
 
 ```
 $ pkgwhen npm:welt-io-x@1.2.3
 pkgwhen: npm:welt-io-x@1.2.3: not found
-$ until pkgwhen npm:welt-io-x@1.2.3; do sleep 30; done
+$ until pkgwhen npm:welt-io-x@1.2.3 || [ $? -ne 1 ]; do sleep 30; done
 ```
 
 The same list as JSON, for a script that compares rather than reads:

@@ -70,7 +70,7 @@ Exit codes:
 // instructionsText is the paragraph a coding agent needs in order to use
 // pkgwhen: when to reach for it, the argument forms, what the marks mean,
 // and what exit 1 means. README.md quotes it verbatim.
-const instructionsText = "To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version, `--min-age 1d` to list only versions old enough to pass a one-day release age, and `--since 30d` for versions published in the last 30 days. Rows marked `yanked`, `deprecated`, or `pre` are versions that dependency updaters usually skip, so a newer version with a mark is not a reason to expect a PR. Exit 1 means the version does not exist yet; to wait for a version you just published, rerun in a loop.\n"
+const instructionsText = "To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version, `--min-age 1d` to list only versions old enough to pass a one-day release age, and `--since 30d` for versions published in the last 30 days. Rows marked `yanked`, `deprecated`, or `pre` are versions that dependency updaters usually skip, so a newer version with a mark is not a reason to expect a PR. Exit 1 means the package or version does not exist (yet); rerun while it exits 1, and stop and read stderr on any other exit code.\n"
 
 type cliArgs struct {
 	showHelp         bool
