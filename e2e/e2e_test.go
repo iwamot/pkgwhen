@@ -43,7 +43,15 @@ type result struct {
 
 func runBin(t *testing.T, args ...string) result {
 	t.Helper()
+	return runBinWith(t, nil, args...)
+}
+
+// runBinWith runs the binary with extra environment entries, for the paths
+// that need the process pointed somewhere.
+func runBinWith(t *testing.T, extraEnv []string, args ...string) result {
+	t.Helper()
 	cmd := exec.Command(binPath, args...)
+	cmd.Env = append(os.Environ(), extraEnv...)
 	var so, se bytes.Buffer
 	cmd.Stdout = &so
 	cmd.Stderr = &se
@@ -89,6 +97,8 @@ func TestUsageErrors(t *testing.T) {
 		{"bad registry", []string{"cargo:serde"}, "unknown registry"},
 		{"ambiguous unit", []string{"--min-age", "1m", "pypi:x"}, "minutes or months"},
 		{"bad limit", []string{"-n", "0", "pypi:x"}, "positive integer"},
+		{"contradictory window", []string{"--min-age", "7d", "--since", "1d", "pypi:x"}, "nothing can match"},
+		{"dead option with a version", []string{"--min-age", "1d", "pypi:x@1.2.3"}, "does not apply with @VERSION"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -97,5 +107,18 @@ func TestUsageErrors(t *testing.T) {
 				t.Errorf("%v = %+v", tt.args, r)
 			}
 		})
+	}
+}
+
+// TestRegistryError points the process at a closed port, so the request
+// fails in transport before any registry answers. That is the exit code for
+// "could not be reached", which is what a waiting loop has to stop on.
+func TestRegistryError(t *testing.T) {
+	env := []string{"HTTP_PROXY=http://127.0.0.1:9", "HTTPS_PROXY=http://127.0.0.1:9", "NO_PROXY="}
+	for _, args := range [][]string{{"pypi:openai-agents"}, {"pypi:openai-agents@0.22.0"}} {
+		r := runBinWith(t, env, args...)
+		if r.exitCode != 3 || r.stdout != "" || !strings.HasPrefix(r.stderr, "pkgwhen: ") {
+			t.Errorf("%v = %+v", args, r)
+		}
 	}
 }

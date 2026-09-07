@@ -122,7 +122,8 @@ Usage:
 REGISTRY is pypi, npm, or github-releases. NAME is the package name, or
 OWNER/REPO for GitHub. Versions are printed newest first by publish date,
 at most 20 unless -n or --all is given. With @VERSION, only that version
-is printed, with the time of day.
+is printed, with the time of day, and the options that narrow a list do
+not apply.
 
 Options:
   --min-age DUR   only versions published more than DUR ago (1d, 36h, 2w)
@@ -143,7 +144,8 @@ Marks at the end of a row:
 Exit codes:
   0  printed
   1  the package, or the version given with @VERSION, does not exist
-  2  usage error, or the registry could not be reached
+  2  usage error: fix the flags or the argument
+  3  registry error: check the token or the network, then retry
 ```
 
 - Versions are ordered by publish date, not by version number, so a patch to an older line appears where it was published. To compare two versions, ask for each with `@VERSION`.
@@ -153,6 +155,7 @@ Exit codes:
 - GitHub: the date is `published_at`, which is what Renovate uses and which can trail the draft's creation by as long as the draft took to finish. Draft releases are dropped. `GITHUB_TOKEN`, `GH_TOKEN`, or `gh auth token` is used when available; without one, the API allows 60 requests an hour, and hitting that limit is reported as such rather than as a bare 403. Releases are read in the order GitHub returns them, newest created first, and only as many pages as the requested count needs unless a date option or `--all` is given.
 - An empty answer says which kind it is. A window that dropped everything names the nearest version it dropped, on stderr, and still exits 0. A name the registry does not have exits 1 and says so, apart from a version that is not there yet, because the next step differs: check the name, or wait.
 - Nothing is cached and nothing is written. Every call asks the registry.
+- While the version is 0.x, the exit codes and the shape of the output can still change between releases; from 1.0 they only gain cases.
 
 ## Out of scope
 
