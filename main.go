@@ -22,7 +22,8 @@ import (
 const (
 	exitOK       = 0
 	exitNotFound = 1
-	exitError    = 2
+	exitUsage    = 2
+	exitRegistry = 3
 )
 
 const devVersion = "0.0.0-dev"
@@ -43,7 +44,8 @@ Usage:
 REGISTRY is pypi, npm, or github-releases. NAME is the package name, or
 OWNER/REPO for GitHub. Versions are printed newest first by publish date,
 at most 20 unless -n or --all is given. With @VERSION, only that version
-is printed, with the time of day.
+is printed, with the time of day, and the options that narrow a list do
+not apply.
 
 Options:
   --min-age DUR   only versions published more than DUR ago (1d, 36h, 2w)
@@ -64,7 +66,8 @@ Marks at the end of a row:
 Exit codes:
   0  printed
   1  the package, or the version given with @VERSION, does not exist
-  2  usage error, or the registry could not be reached
+  2  usage error: fix the flags or the argument
+  3  registry error: check the token or the network, then retry
 `
 
 // instructionsText is the paragraph a coding agent needs in order to use
@@ -84,9 +87,21 @@ type cliArgs struct {
 	spec             spec.Spec
 }
 
+// deadOptionsError words the refusal for options that have no effect next to
+// @VERSION. Names arrive in --help order, so the list reads the same way in
+// the message and in the help.
+func deadOptionsError(names []string) error {
+	if len(names) == 1 {
+		return fmt.Errorf("%s does not apply with @VERSION; drop the flag or the @VERSION", names[0])
+	}
+	list := strings.Join(names[:len(names)-1], ", ") + " and " + names[len(names)-1]
+	return fmt.Errorf("%s do not apply with @VERSION; drop them or the @VERSION", list)
+}
+
 func parseArgs(argv []string) (cliArgs, error) {
 	a := cliArgs{limit: defaultLimit}
 	haveSpec := false
+	var limitGiven, allGiven bool
 	for i := 0; i < len(argv); i++ {
 		arg := argv[i]
 		switch arg {
@@ -98,6 +113,7 @@ func parseArgs(argv []string) (cliArgs, error) {
 			a.showInstructions = true
 		case "--all":
 			a.limit = 0
+			allGiven = true
 		case "--json":
 			a.asJSON = true
 		case "--min-age", "--since", "-n":
@@ -113,6 +129,7 @@ func parseArgs(argv []string) (cliArgs, error) {
 					return cliArgs{}, fmt.Errorf("-n needs a positive integer, got %q", value)
 				}
 				a.limit = n
+				limitGiven = true
 			case "--min-age":
 				d, err := period.Parse(value)
 				if err != nil {
@@ -142,6 +159,36 @@ func parseArgs(argv []string) (cliArgs, error) {
 	}
 	if !haveSpec && !a.showHelp && !a.showVersion && !a.showInstructions {
 		return cliArgs{}, fmt.Errorf("no package given; want REGISTRY:NAME[@VERSION]")
+	}
+	// One version is fetched by name, so the options that narrow a list are
+	// read and never used. Silently ignoring them would print a row that has
+	// nothing to do with the window the caller asked for, and would freeze
+	// that answer into the contract; refusing leaves room to give the pair a
+	// meaning later, such as a release-age check on a single version.
+	if a.spec.Version != "" {
+		var dead []string
+		if a.window.MinAgeSet {
+			dead = append(dead, "--min-age")
+		}
+		if a.window.SinceSet {
+			dead = append(dead, "--since")
+		}
+		if limitGiven {
+			dead = append(dead, "-n")
+		}
+		if allGiven {
+			dead = append(dead, "--all")
+		}
+		if len(dead) > 0 {
+			return cliArgs{}, deadOptionsError(dead)
+		}
+	}
+	// A --min-age longer than --since leaves no room between the edges, so no
+	// version can ever match and waiting will not help. Equal edges are left
+	// alone: both are inclusive, so they still name a moment. Checked only
+	// with a package in hand, so --help keeps working next to stray flags.
+	if haveSpec && a.window.MinAgeSet && a.window.SinceSet && a.window.MinAge > a.window.Since {
+		return cliArgs{}, fmt.Errorf("--min-age %s is longer than --since %s; nothing can match", a.window.MinAgeText, a.window.SinceText)
 	}
 	return a, nil
 }
@@ -268,7 +315,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	a, err := parseArgs(argv)
 	if err != nil {
 		fmt.Fprintln(stderr, "pkgwhen:", err)
-		return exitError
+		return exitUsage
 	}
 	if a.showHelp {
 		fmt.Fprint(stdout, helpText)
@@ -295,7 +342,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 		r, kind, err := one(a.spec, token)
 		if err != nil {
 			fmt.Fprintln(stderr, "pkgwhen:", err)
-			return exitError
+			return exitRegistry
 		}
 		if kind != lookupFound {
 			fmt.Fprintf(stderr, "pkgwhen: %s\n", notFound(a.spec, kind, token != ""))
@@ -318,7 +365,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	rs, found, err := list(a.spec, want, token)
 	if err != nil {
 		fmt.Fprintln(stderr, "pkgwhen:", err)
-		return exitError
+		return exitRegistry
 	}
 	if !found {
 		fmt.Fprintf(stderr, "pkgwhen: %s\n", notFound(a.spec, lookupNoPackage, token != ""))

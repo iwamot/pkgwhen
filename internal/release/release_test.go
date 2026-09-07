@@ -139,8 +139,6 @@ func TestNote(t *testing.T) {
 	}{
 		{"no window", []Release{old}, Window{}, ""},
 		{"window keeps something", []Release{old, fresh}, since(30*day, "30d"), ""},
-		{"impossible window", []Release{old, fresh}, Window{MinAge: 7 * day, MinAgeSet: true, MinAgeText: "7d", Since: day, SinceSet: true, SinceText: "1d"}, "no version can match: --min-age 7d is longer than --since 1d"},
-		{"impossible window with no versions", nil, Window{MinAge: 7 * day, MinAgeSet: true, MinAgeText: "7d", Since: day, SinceSet: true, SinceText: "1d"}, "no version can match: --min-age 7d is longer than --since 1d"},
 		{"since dropped everything", []Release{old}, since(30*day, "30d"), "no version published in the last 30d; latest is 0.21.0, published 45d ago"},
 		{"min-age dropped everything", []Release{fresh}, minAge(day, "1d"), "no version is older than 1d; newest is 0.22.0, published 3h ago"},
 		{"both set, the newest dropped is too new", []Release{old, fresh}, both, "no version is older than 1d; newest is 0.22.0, published 3h ago"},

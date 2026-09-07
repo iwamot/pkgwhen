@@ -75,7 +75,9 @@ func Filter(rs []Release, now time.Time, w Window) []Release {
 // Note explains an empty result to a caller who narrowed the list with a
 // window: which edge emptied it, and the nearest version that edge dropped.
 // It returns "" when versions remain or when no window was set, so a caller
-// can print whatever comes back and nothing otherwise.
+// can print whatever comes back and nothing otherwise. A window that can
+// never match is not handled here: the flags are refused before a registry
+// is read.
 //
 // The nearest version is the newest one the window dropped. MinAge drops the
 // newest versions and Since the oldest, so that version is a MinAge casualty
@@ -83,9 +85,6 @@ func Filter(rs []Release, now time.Time, w Window) []Release {
 func Note(rs []Release, now time.Time, w Window) string {
 	if !w.MinAgeSet && !w.SinceSet {
 		return ""
-	}
-	if w.MinAgeSet && w.SinceSet && w.MinAge > w.Since {
-		return fmt.Sprintf("no version can match: --min-age %s is longer than --since %s", w.MinAgeText, w.SinceText)
 	}
 	var nearest *Release
 	for i, r := range rs {

@@ -37,6 +37,26 @@ func TestParseArgs(t *testing.T) {
 			a.spec = pypi
 			a.window = release.Window{MinAge: day, MinAgeSet: true, MinAgeText: "1d", Since: 30 * day, SinceSet: true, SinceText: "30d"}
 		}), ""},
+		{"equal windows", []string{"--min-age", "1d", "--since", "1d", "pypi:openai-agents"}, with(func(a *cliArgs) {
+			a.spec = pypi
+			a.window = release.Window{MinAge: day, MinAgeSet: true, MinAgeText: "1d", Since: day, SinceSet: true, SinceText: "1d"}
+		}), ""},
+		{"contradictory window", []string{"--min-age", "7d", "--since", "1d", "pypi:a"}, cliArgs{}, "--min-age 7d is longer than --since 1d; nothing can match"},
+		{"min-age with a version", []string{"--min-age", "1d", "pypi:a@1.2.3"}, cliArgs{}, "--min-age does not apply with @VERSION; drop the flag or the @VERSION"},
+		{"limit with a version", []string{"-n", "5", "pypi:a@1.2.3"}, cliArgs{}, "-n does not apply with @VERSION"},
+		{"all with a version", []string{"--all", "pypi:a@1.2.3"}, cliArgs{}, "--all does not apply with @VERSION"},
+		{"several dead options with a version", []string{"--all", "--since", "30d", "pypi:a@1.2.3"}, cliArgs{}, "--since and --all do not apply with @VERSION; drop them or the @VERSION"},
+		{"dead options are refused before the window is compared", []string{"--min-age", "7d", "--since", "1d", "pypi:a@1.2.3"}, cliArgs{}, "--min-age and --since do not apply with @VERSION"},
+		{"json still applies with a version", []string{"--json", "pypi:a@1.2.3"}, with(func(a *cliArgs) {
+			a.spec = spec.Spec{Registry: "pypi", Name: "a", Version: "1.2.3"}
+			a.asJSON = true
+		}), ""},
+		{"contradictory window across units", []string{"--min-age", "36h", "--since", "1d", "pypi:a"}, cliArgs{}, "--min-age 36h is longer than --since 1d"},
+		{"contradictory window without a package", []string{"--min-age", "7d", "--since", "1d"}, cliArgs{}, "no package given"},
+		{"contradictory window with help", []string{"--help", "--min-age", "7d", "--since", "1d"}, with(func(a *cliArgs) {
+			a.showHelp = true
+			a.window = release.Window{MinAge: 7 * day, MinAgeSet: true, MinAgeText: "7d", Since: day, SinceSet: true, SinceText: "1d"}
+		}), ""},
 		{"limit", []string{"-n", "5", "pypi:openai-agents"}, with(func(a *cliArgs) { a.spec = pypi; a.limit = 5 }), ""},
 		{"all", []string{"--all", "pypi:openai-agents"}, with(func(a *cliArgs) { a.spec = pypi; a.limit = 0 }), ""},
 		{"all then limit", []string{"--all", "-n", "3", "pypi:openai-agents"}, with(func(a *cliArgs) { a.spec = pypi; a.limit = 3 }), ""},
@@ -112,6 +132,22 @@ func TestMissing(t *testing.T) {
 	}
 }
 
+func TestDeadOptionsError(t *testing.T) {
+	tests := []struct {
+		names []string
+		want  string
+	}{
+		{[]string{"--min-age"}, "--min-age does not apply with @VERSION; drop the flag or the @VERSION"},
+		{[]string{"--min-age", "-n"}, "--min-age and -n do not apply with @VERSION; drop them or the @VERSION"},
+		{[]string{"--min-age", "--since", "-n"}, "--min-age, --since and -n do not apply with @VERSION; drop them or the @VERSION"},
+	}
+	for _, tt := range tests {
+		if got := deadOptionsError(tt.names).Error(); got != tt.want {
+			t.Errorf("deadOptionsError(%v) = %q, want %q", tt.names, got, tt.want)
+		}
+	}
+}
+
 func TestResolveVersion(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -146,7 +182,8 @@ func TestRunOffline(t *testing.T) {
 		{"help", []string{"--help"}, exitOK, "pkgwhen — list", ""},
 		{"version", []string{"--version"}, exitOK, devVersion, ""},
 		{"instructions", []string{"--instructions"}, exitOK, "use `pkgwhen` instead of curl", ""},
-		{"usage error", []string{"cargo:serde"}, exitError, "", "pkgwhen: unknown registry"},
+		{"usage error", []string{"cargo:serde"}, exitUsage, "", "pkgwhen: unknown registry"},
+		{"contradictory window", []string{"--min-age", "7d", "--since", "1d", "pypi:x"}, exitUsage, "", "nothing can match"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
