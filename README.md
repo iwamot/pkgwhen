@@ -44,7 +44,7 @@ Or download a prebuilt binary from the [Releases page](https://github.com/iwamot
 Then tell the agent to use it, in `CLAUDE.md`, `AGENTS.md`, or whichever file your agent reads:
 
 ```markdown
-To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version, `--min-age 1d` to list only versions old enough to pass a one-day release age, and `--since 30d` for versions published in the last 30 days. Rows marked `yanked`, `deprecated`, or `pre` are versions that dependency updaters usually skip, so a newer version with a mark is not a reason to expect a PR. Exit 1 means the package or version does not exist (yet); rerun while it exits 1, and stop and read stderr on any other exit code.
+To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version, `--min-age 1d` to list only versions old enough to pass a one-day release age, and `--since 30d` for versions published in the last 30 days. A mark means dependency updaters usually skip that version, so a newer marked version is not a reason to expect a PR. Exit 1 means the package or version does not exist (yet); rerun while it exits 1, and stop and read stderr on any other exit code.
 ```
 
 That paragraph is all the agent needs. `pkgwhen --instructions` prints the same paragraph, for setup scripts and machines where this page is not at hand.
@@ -62,6 +62,14 @@ VERSION  PUBLISHED   AGE
 ... and 2356 more (pass -n N or --all)
 ```
 
+A window that leaves nothing says why on stderr, and names the nearest version it dropped, so an empty table is never silent:
+
+```
+$ pkgwhen --since 1d pypi:openai-agents
+pkgwhen: no version published in the last 1d; latest is 0.22.0, published 19d ago
+VERSION  PUBLISHED  AGE
+```
+
 One version, with the time of day. The tag on GitHub is `v2.2.12`, and the plain version finds it too:
 
 ```
@@ -73,7 +81,7 @@ A version that is not there yet. Nothing is printed on stdout, and the exit code
 
 ```
 $ pkgwhen npm:welt-io-x@1.2.3
-pkgwhen: npm:welt-io-x@1.2.3: not found
+pkgwhen: npm:welt-io-x@1.2.3: version not found; run `pkgwhen npm:welt-io-x` to see the versions that exist
 $ until pkgwhen npm:welt-io-x@1.2.3 || [ $? -ne 1 ]; do sleep 30; done
 ```
 
@@ -143,6 +151,7 @@ Exit codes:
 - npm: the full packument is fetched, because only it carries publish dates. For a large package that is a few megabytes, compressed in transit.
 - PyPI: a version's date is the earliest upload among its files, which is the moment uv's `exclude-newer` treats it as available. A version is marked `yanked` when any of its files is, which is how Renovate reads it. Versions with no files are left out.
 - GitHub: the date is `published_at`, which is what Renovate uses and which can trail the draft's creation by as long as the draft took to finish. Draft releases are dropped. `GITHUB_TOKEN`, `GH_TOKEN`, or `gh auth token` is used when available; without one, the API allows 60 requests an hour, and hitting that limit is reported as such rather than as a bare 403. Releases are read in the order GitHub returns them, newest created first, and only as many pages as the requested count needs unless a date option or `--all` is given.
+- An empty answer says which kind it is. A window that dropped everything names the nearest version it dropped, on stderr, and still exits 0. A name the registry does not have exits 1 and says so, apart from a version that is not there yet, because the next step differs: check the name, or wait.
 - Nothing is cached and nothing is written. Every call asks the registry.
 
 ## Out of scope

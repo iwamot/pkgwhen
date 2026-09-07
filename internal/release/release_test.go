@@ -120,6 +120,43 @@ func TestAge(t *testing.T) {
 	}
 }
 
+func TestNote(t *testing.T) {
+	day := 24 * time.Hour
+	old := Release{Version: "0.21.0", Published: at(45 * day)}
+	fresh := Release{Version: "0.22.0", Published: at(3 * time.Hour)}
+	minAge := func(d time.Duration, text string) Window {
+		return Window{MinAge: d, MinAgeSet: true, MinAgeText: text}
+	}
+	since := func(d time.Duration, text string) Window {
+		return Window{Since: d, SinceSet: true, SinceText: text}
+	}
+	both := Window{MinAge: day, MinAgeSet: true, MinAgeText: "1d", Since: 30 * day, SinceSet: true, SinceText: "30d"}
+	tests := []struct {
+		name string
+		rs   []Release
+		w    Window
+		want string
+	}{
+		{"no window", []Release{old}, Window{}, ""},
+		{"window keeps something", []Release{old, fresh}, since(30*day, "30d"), ""},
+		{"impossible window", []Release{old, fresh}, Window{MinAge: 7 * day, MinAgeSet: true, MinAgeText: "7d", Since: day, SinceSet: true, SinceText: "1d"}, "no version can match: --min-age 7d is longer than --since 1d"},
+		{"impossible window with no versions", nil, Window{MinAge: 7 * day, MinAgeSet: true, MinAgeText: "7d", Since: day, SinceSet: true, SinceText: "1d"}, "no version can match: --min-age 7d is longer than --since 1d"},
+		{"since dropped everything", []Release{old}, since(30*day, "30d"), "no version published in the last 30d; latest is 0.21.0, published 45d ago"},
+		{"min-age dropped everything", []Release{fresh}, minAge(day, "1d"), "no version is older than 1d; newest is 0.22.0, published 3h ago"},
+		{"both set, the newest dropped is too new", []Release{old, fresh}, both, "no version is older than 1d; newest is 0.22.0, published 3h ago"},
+		{"both set, everything is too old", []Release{old}, both, "no version published in the last 30d; latest is 0.21.0, published 45d ago"},
+		{"nothing to name", nil, since(30*day, "30d"), "no version published in the last 30d"},
+		{"nothing to name, min-age only", nil, minAge(day, "1d"), "no version is older than 1d"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Note(tt.rs, now, tt.w); got != tt.want {
+				t.Errorf("Note = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestTable(t *testing.T) {
 	rs := []Release{
 		{Version: "0.21.0", Published: at(3 * 24 * time.Hour)},

@@ -25,11 +25,17 @@ func TestParseArgs(t *testing.T) {
 	}{
 		{"spec only", []string{"pypi:openai-agents"}, with(func(a *cliArgs) { a.spec = pypi }), ""},
 		{"version in spec", []string{"npm:@types/node@22.0.0"}, with(func(a *cliArgs) { a.spec = spec.Spec{Registry: "npm", Name: "@types/node", Version: "22.0.0"} }), ""},
-		{"min-age", []string{"--min-age", "1d", "pypi:openai-agents"}, with(func(a *cliArgs) { a.spec = pypi; a.window = release.Window{MinAge: day, MinAgeSet: true} }), ""},
-		{"since after spec", []string{"pypi:openai-agents", "--since", "2w"}, with(func(a *cliArgs) { a.spec = pypi; a.window = release.Window{Since: 14 * day, SinceSet: true} }), ""},
+		{"min-age", []string{"--min-age", "1d", "pypi:openai-agents"}, with(func(a *cliArgs) {
+			a.spec = pypi
+			a.window = release.Window{MinAge: day, MinAgeSet: true, MinAgeText: "1d"}
+		}), ""},
+		{"since after spec", []string{"pypi:openai-agents", "--since", "2w"}, with(func(a *cliArgs) {
+			a.spec = pypi
+			a.window = release.Window{Since: 14 * day, SinceSet: true, SinceText: "2w"}
+		}), ""},
 		{"both windows", []string{"--min-age", "1d", "--since", "30d", "pypi:openai-agents"}, with(func(a *cliArgs) {
 			a.spec = pypi
-			a.window = release.Window{MinAge: day, MinAgeSet: true, Since: 30 * day, SinceSet: true}
+			a.window = release.Window{MinAge: day, MinAgeSet: true, MinAgeText: "1d", Since: 30 * day, SinceSet: true, SinceText: "30d"}
 		}), ""},
 		{"limit", []string{"-n", "5", "pypi:openai-agents"}, with(func(a *cliArgs) { a.spec = pypi; a.limit = 5 }), ""},
 		{"all", []string{"--all", "pypi:openai-agents"}, with(func(a *cliArgs) { a.spec = pypi; a.limit = 0 }), ""},
@@ -68,6 +74,41 @@ func TestParseArgs(t *testing.T) {
 				t.Errorf("parseArgs = %#v, want %#v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestNotFound(t *testing.T) {
+	pypiSpec := spec.Spec{Registry: "pypi", Name: "foo", Version: "1.2.3"}
+	npmSpec := spec.Spec{Registry: "npm", Name: "@types/node"}
+	ghSpec := spec.Spec{Registry: "github-releases", Name: "iwamot/pkgwhen"}
+	tests := []struct {
+		name      string
+		s         spec.Spec
+		kind      lookup
+		haveToken bool
+		want      string
+	}{
+		{"version", pypiSpec, lookupNoVersion, false, "pypi:foo@1.2.3: version not found; run `pkgwhen pypi:foo` to see the versions that exist"},
+		{"package on pypi", spec.Spec{Registry: "pypi", Name: "foo"}, lookupNoPackage, false, "pypi:foo: package not found on pypi (or not visible yet); check the name"},
+		{"package on npm", npmSpec, lookupNoPackage, false, "npm:@types/node: package not found on npm (or not visible yet); check the name"},
+		{"repository without a token", ghSpec, lookupNoPackage, false, "github-releases:iwamot/pkgwhen: repository not found on github (or private; set GITHUB_TOKEN or run `gh auth login`)"},
+		{"repository with a token", ghSpec, lookupNoPackage, true, "github-releases:iwamot/pkgwhen: repository not found on github (or private, and the token cannot see it)"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := notFound(tt.s, tt.kind, tt.haveToken); got != tt.want {
+				t.Errorf("notFound = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestMissing(t *testing.T) {
+	if got := missing(true); got != lookupNoVersion {
+		t.Errorf("missing(true) = %v, want lookupNoVersion", got)
+	}
+	if got := missing(false); got != lookupNoPackage {
+		t.Errorf("missing(false) = %v, want lookupNoPackage", got)
 	}
 }
 
