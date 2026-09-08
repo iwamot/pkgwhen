@@ -117,7 +117,7 @@ func TestRegistryError(t *testing.T) {
 	env := []string{"HTTP_PROXY=http://127.0.0.1:9", "HTTPS_PROXY=http://127.0.0.1:9", "NO_PROXY="}
 	for _, args := range [][]string{{"pypi:openai-agents"}, {"pypi:openai-agents@0.22.0"}} {
 		r := runBinWith(t, env, args...)
-		if r.exitCode != 3 || r.stdout != "" || !strings.HasPrefix(r.stderr, "pkgwhen: ") {
+		if r.exitCode != 3 || r.stdout != "" || !strings.HasPrefix(r.stderr, "pkgwhen: pypi:openai-agents") {
 			t.Errorf("%v = %+v", args, r)
 		}
 	}

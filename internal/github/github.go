@@ -7,10 +7,14 @@ package github
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/iwamot/pkgwhen/internal/fetch"
 	"github.com/iwamot/pkgwhen/internal/release"
 )
 
@@ -48,7 +52,7 @@ func AlternateTag(v string) string {
 func DecodeList(data []byte) ([]release.Release, error) {
 	var docs []doc
 	if err := json.Unmarshal(data, &docs); err != nil {
-		return nil, fmt.Errorf("github: %w", err)
+		return nil, err
 	}
 	var out []release.Release
 	for _, d := range docs {
@@ -68,7 +72,7 @@ func DecodeList(data []byte) ([]release.Release, error) {
 func DecodeOne(data []byte) (release.Release, error) {
 	var d doc
 	if err := json.Unmarshal(data, &d); err != nil {
-		return release.Release{}, fmt.Errorf("github: %w", err)
+		return release.Release{}, err
 	}
 	return fromDoc(d)
 }
@@ -76,20 +80,52 @@ func DecodeOne(data []byte) (release.Release, error) {
 func fromDoc(d doc) (release.Release, error) {
 	t, err := time.Parse(time.RFC3339, d.PublishedAt)
 	if err != nil {
-		return release.Release{}, fmt.Errorf("github: release %s: %w", d.TagName, err)
+		return release.Release{}, fmt.Errorf("release %s: %w", d.TagName, err)
 	}
 	return release.Release{Version: d.TagName, Published: t, Prerelease: d.Prerelease}, nil
 }
 
 // StatusError describes a response that is neither the document nor a 404.
-// A 403 with no requests left in the hour is the limit for callers without
-// a token, and the message says how to lift it, so an agent retrying in a
-// loop can fix its own setup.
-func StatusError(url string, status int, rateLimitRemaining string) error {
-	if status == 403 && rateLimitRemaining == "0" {
-		return fmt.Errorf("github: %s: rate limited; set GITHUB_TOKEN or run `gh auth login`", url)
+// A 429 is always a rate limit; a 403 is one only when a header says so,
+// because GitHub answers 403 for a token that lacks access as well. That
+// other 403 is what a scope, an unapproved SSO session, or an IP allow list
+// looks like, and all three are answered at the token, so the message says
+// to look there. A caller with no token sees 200 or 404 instead, so there
+// is nothing to tell them apart from.
+func StatusError(resp fetch.Response, haveToken bool, now time.Time) error {
+	limited := resp.Status == http.StatusTooManyRequests ||
+		(resp.Status == http.StatusForbidden && (resp.RetryAfter != "" || resp.RateLimitRemaining == "0"))
+	if !limited {
+		if resp.Status == http.StatusForbidden {
+			return errors.New("HTTP 403; the token may lack access to this repository")
+		}
+		return fmt.Errorf("HTTP %d", resp.Status)
 	}
-	return fmt.Errorf("github: %s: HTTP %d", url, status)
+	msg := RateLimited(resp, now)
+	if !haveToken {
+		msg += "; set GITHUB_TOKEN or run `gh auth login`"
+	}
+	return errors.New(msg)
+}
+
+// RateLimited says how long to wait. GitHub sends Retry-After for the
+// short-term limit and X-RateLimit-Reset for the hourly one, so whichever
+// arrived decides the wording; with neither, or with a reset that has
+// already passed, the docs say to wait a minute. The wait is relative
+// because the rest of the output is, and a caller reading it may not know
+// the current time.
+func RateLimited(resp fetch.Response, now time.Time) string {
+	if s, err := strconv.Atoi(strings.TrimSpace(resp.RetryAfter)); err == nil && s > 0 {
+		return fmt.Sprintf("rate limited; retry after %ds", s)
+	}
+	if resp.RateLimitRemaining == "0" {
+		if sec, err := strconv.ParseInt(strings.TrimSpace(resp.RateLimitReset), 10, 64); err == nil {
+			if reset := time.Unix(sec, 0).UTC(); reset.After(now) {
+				return fmt.Sprintf("rate limited for %s", release.Age(reset, now))
+			}
+		}
+	}
+	return "rate limited; wait at least a minute"
 }
 
 // Headers builds the request headers, adding the token when there is one.

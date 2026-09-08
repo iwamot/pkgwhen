@@ -35,7 +35,7 @@ func URL(name string) string {
 func Decode(data []byte) ([]release.Release, error) {
 	var p packument
 	if err := json.Unmarshal(data, &p); err != nil {
-		return nil, fmt.Errorf("npm: %w", err)
+		return nil, err
 	}
 	var out []release.Release
 	for v, info := range p.Versions {
@@ -45,7 +45,7 @@ func Decode(data []byte) ([]release.Release, error) {
 		}
 		t, err := time.Parse(time.RFC3339Nano, stamp)
 		if err != nil {
-			return nil, fmt.Errorf("npm: version %s: %w", v, err)
+			return nil, fmt.Errorf("version %s: %w", v, err)
 		}
 		out = append(out, release.Release{
 			Version:    v,

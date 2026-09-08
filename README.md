@@ -44,7 +44,7 @@ Or download a prebuilt binary from the [Releases page](https://github.com/iwamot
 Then tell the agent to use it, in `CLAUDE.md`, `AGENTS.md`, or whichever file your agent reads:
 
 ```markdown
-To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version, `--min-age 1d` to list only versions old enough to pass a one-day release age, and `--since 30d` for versions published in the last 30 days. A mark means dependency updaters usually skip that version, so a newer marked version is not a reason to expect a PR. Exit 1 means the package or version does not exist (yet); rerun while it exits 1, and stop and read stderr on any other exit code.
+To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version, `--min-age 1d` to list only versions old enough to pass a one-day release age, and `--since 30d` for versions published in the last 30 days. A mark means dependency updaters usually skip that version, so a newer marked version is not a reason to expect a PR. Exit 1 means the version does not exist (yet); rerun while it exits 1, and stop and read stderr on any other exit code.
 ```
 
 That paragraph is all the agent needs. `pkgwhen --instructions` prints the same paragraph, for setup scripts and machines where this page is not at hand.
@@ -77,12 +77,18 @@ $ pkgwhen github-releases:jdx/aube@2.2.12
 v2.2.12  2026-09-06T00:44:39Z  13h
 ```
 
-A version that is not there yet. Nothing is printed on stdout, and the exit code is 1, so a loop can wait for a package that was just published. The `|| [ $? -ne 1 ]` ends the loop on any other exit code, so a rate limit or an unreachable registry stops it instead of retrying forever:
+A version that is not there yet. Nothing is printed on stdout and the exit code is 1, so a loop can wait for a version that was just published; a name the registry has never heard of exits 4 instead, so the same loop stops on a typo. Before waiting on `github-releases`, pass a token: without one the API allows 60 requests an hour, which this loop spends in about ten minutes, and a private repository answers 404 exactly like a missing one. The `|| [ $? -ne 1 ]` ends the loop on any other exit code, so a rate limit or an unreachable registry stops it instead of retrying forever:
 
 ```
 $ pkgwhen npm:welt-io-x@1.2.3
-pkgwhen: npm:welt-io-x@1.2.3: version not found; run `pkgwhen npm:welt-io-x` to see the versions that exist
+pkgwhen: npm:welt-io-x@1.2.3: version not found; latest is 1.2.2, published 3d ago; run `pkgwhen npm:welt-io-x` to see the versions that exist
 $ until pkgwhen npm:welt-io-x@1.2.3 || [ $? -ne 1 ]; do sleep 30; done
+```
+
+The first release of a brand-new package is the one wait that needs both codes, because until it lands the package itself is not there either:
+
+```
+$ until pkgwhen npm:welt-io-x@1.0.0; do rc=$?; [ $rc -eq 1 ] || [ $rc -eq 4 ] || break; sleep 30; done
 ```
 
 The same list as JSON, for a script that compares rather than reads:
@@ -115,6 +121,7 @@ pkgwhen — list a package's versions with the date each was published.
 Usage:
   pkgwhen [options] REGISTRY:NAME[@VERSION]
 
+Examples:
   pkgwhen pypi:openai-agents
   pkgwhen npm:@types/node@22.0.0
   pkgwhen github-releases:jdx/aube --since 30d
@@ -136,6 +143,10 @@ Options:
   -v, --version   show the version
   --instructions  print the paragraph for the agent's instruction file
 
+Environment:
+  GITHUB_TOKEN, then GH_TOKEN, then `gh auth token`, is used for
+  github-releases, and is required for a private repository.
+
 Marks at the end of a row:
   yanked      the version was yanked (PyPI)
   deprecated  the version is deprecated (npm)
@@ -143,17 +154,18 @@ Marks at the end of a row:
 
 Exit codes:
   0  printed
-  1  the package, or the version given with @VERSION, does not exist
+  1  the version given with @VERSION does not exist
   2  usage error: fix the flags or the argument
   3  registry error: check the token or the network, then retry
+  4  the package, or the repository on GitHub, does not exist
 ```
 
 - Versions are ordered by publish date, not by version number, so a patch to an older line appears where it was published. To compare two versions, ask for each with `@VERSION`.
-- Ages are measured from the current UTC time. The table shows whole days, hours below a day, and minutes below an hour; `--min-age` and `--since` are compared to the second.
+- Ages are measured from the current UTC time. The table shows whole days, hours below a day, minutes below an hour, and seconds below a minute; `--min-age` and `--since` are compared to the second.
 - npm: the full packument is fetched, because only it carries publish dates. For a large package that is a few megabytes, compressed in transit.
 - PyPI: a version's date is the earliest upload among its files, which is the moment uv's `exclude-newer` treats it as available. A version is marked `yanked` when any of its files is, which is how Renovate reads it. Versions with no files are left out.
-- GitHub: the date is `published_at`, which is what Renovate uses and which can trail the draft's creation by as long as the draft took to finish. Draft releases are dropped. `GITHUB_TOKEN`, `GH_TOKEN`, or `gh auth token` is used when available; without one, the API allows 60 requests an hour, and hitting that limit is reported as such rather than as a bare 403. Releases are read in the order GitHub returns them, newest created first, and only as many pages as the requested count needs unless a date option or `--all` is given.
-- An empty answer says which kind it is. A window that dropped everything names the nearest version it dropped, on stderr, and still exits 0. A name the registry does not have exits 1 and says so, apart from a version that is not there yet, because the next step differs: check the name, or wait.
+- GitHub: the date is `published_at`, which is what Renovate uses and which can trail the draft's creation by as long as the draft took to finish. Draft releases are dropped. `GITHUB_TOKEN`, `GH_TOKEN`, or `gh auth token` is used when available; without one, the API allows 60 requests an hour. Either that limit or the short-term one is reported as a rate limit with how long to wait, rather than as a bare 403. Releases are read in the order GitHub returns them, newest created first, and only as many pages as the requested count needs unless a date option or `--all` is given.
+- An empty answer says which kind it is. A window that dropped everything names the nearest version it dropped, on stderr, and still exits 0. A version the registry does not have exits 1 and names the latest one that does exist; a package or repository it does not have exits 4, because the next step differs: wait, or check the name.
 - Nothing is cached and nothing is written. Every call asks the registry.
 - While the version is 0.x, the exit codes and the shape of the output can still change between releases; from 1.0 they only gain cases.
 

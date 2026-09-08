@@ -11,14 +11,17 @@ import (
 )
 
 // Response is what a GET came back with. Next is the URL of the following
-// page when the server sent a Link header with rel="next", else empty.
-// RateLimitRemaining is the X-RateLimit-Remaining header as sent, else
-// empty; GitHub uses it to say that a 403 is the hourly limit.
+// page when the server sent a Link header with rel="next", else empty. The
+// three rate-limit fields are the headers as sent, else empty: GitHub uses
+// RateLimitRemaining to say that a 403 is a limit, and answers with either
+// RateLimitReset (an epoch second) or RetryAfter (seconds to wait).
 type Response struct {
 	Status             int
 	Body               []byte
 	Next               string
 	RateLimitRemaining string
+	RateLimitReset     string
+	RetryAfter         string
 }
 
 var client = &http.Client{Timeout: 60 * time.Second}
@@ -49,6 +52,8 @@ func Get(url string, headers map[string]string) (Response, error) {
 		Body:               body,
 		Next:               NextLink(resp.Header.Get("Link")),
 		RateLimitRemaining: resp.Header.Get("X-RateLimit-Remaining"),
+		RateLimitReset:     resp.Header.Get("X-RateLimit-Reset"),
+		RetryAfter:         resp.Header.Get("Retry-After"),
 	}, nil
 }
 

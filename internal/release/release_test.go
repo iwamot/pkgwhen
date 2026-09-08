@@ -105,8 +105,10 @@ func TestAge(t *testing.T) {
 		ago  time.Duration
 		want string
 	}{
-		{0, "0m"},
-		{-time.Hour, "0m"},
+		{0, "0s"},
+		{-time.Hour, "0s"},
+		{30 * time.Second, "30s"},
+		{time.Minute, "1m"},
 		{59 * time.Minute, "59m"},
 		{time.Hour, "1h"},
 		{23*time.Hour + 59*time.Minute, "23h"},
@@ -143,6 +145,7 @@ func TestNote(t *testing.T) {
 		{"min-age dropped everything", []Release{fresh}, minAge(day, "1d"), "no version is older than 1d; newest is 0.22.0, published 3h ago"},
 		{"both set, the newest dropped is too new", []Release{old, fresh}, both, "no version is older than 1d; newest is 0.22.0, published 3h ago"},
 		{"both set, everything is too old", []Release{old}, both, "no version published in the last 30d; latest is 0.21.0, published 45d ago"},
+		{"the named version keeps its marks", []Release{{Version: "0.21.0", Published: at(45 * day), Yanked: true}}, since(30*day, "30d"), "no version published in the last 30d; latest is 0.21.0 (yanked), published 45d ago"},
 		{"nothing to name", nil, since(30*day, "30d"), "no version published in the last 30d"},
 		{"nothing to name, min-age only", nil, minAge(day, "1d"), "no version is older than 1d"},
 	}
@@ -152,6 +155,37 @@ func TestNote(t *testing.T) {
 				t.Errorf("Note = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestLatest(t *testing.T) {
+	day := 24 * time.Hour
+	old := Release{Version: "0.21.0", Published: at(45 * day)}
+	fresh := Release{Version: "0.22.0", Published: at(3 * time.Hour)}
+	if _, ok := Latest(nil); ok {
+		t.Error("Latest(nil) reported a release")
+	}
+	for _, rs := range [][]Release{{old, fresh}, {fresh, old}} {
+		got, ok := Latest(rs)
+		if !ok || got.Version != "0.22.0" {
+			t.Errorf("Latest(%v) = %+v, %v", rs, got, ok)
+		}
+	}
+}
+
+func TestDescribe(t *testing.T) {
+	tests := []struct {
+		r    Release
+		want string
+	}{
+		{Release{Version: "1.3.2", Published: at(45 * 24 * time.Hour)}, "1.3.2, published 45d ago"},
+		{Release{Version: "1.3.2", Published: at(3 * time.Hour), Yanked: true}, "1.3.2 (yanked), published 3h ago"},
+		{Release{Version: "2.0.0-rc.1", Published: at(90 * time.Second), Deprecated: true, Prerelease: true}, "2.0.0-rc.1 (deprecated, pre), published 1m ago"},
+	}
+	for _, tt := range tests {
+		if got := Describe(tt.r, now); got != tt.want {
+			t.Errorf("Describe = %q, want %q", got, tt.want)
+		}
 	}
 }
 

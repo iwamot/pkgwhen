@@ -101,22 +101,29 @@ func TestNotFound(t *testing.T) {
 	pypiSpec := spec.Spec{Registry: "pypi", Name: "foo", Version: "1.2.3"}
 	npmSpec := spec.Spec{Registry: "npm", Name: "@types/node"}
 	ghSpec := spec.Spec{Registry: "github-releases", Name: "iwamot/pkgwhen"}
+	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
+	others := []release.Release{
+		{Version: "1.2.0", Published: now.Add(-90 * 24 * time.Hour)},
+		{Version: "1.3.2", Published: now.Add(-45 * 24 * time.Hour), Yanked: true},
+	}
 	tests := []struct {
 		name      string
 		s         spec.Spec
 		kind      lookup
+		others    []release.Release
 		haveToken bool
 		want      string
 	}{
-		{"version", pypiSpec, lookupNoVersion, false, "pypi:foo@1.2.3: version not found; run `pkgwhen pypi:foo` to see the versions that exist"},
-		{"package on pypi", spec.Spec{Registry: "pypi", Name: "foo"}, lookupNoPackage, false, "pypi:foo: package not found on pypi (or not visible yet); check the name"},
-		{"package on npm", npmSpec, lookupNoPackage, false, "npm:@types/node: package not found on npm (or not visible yet); check the name"},
-		{"repository without a token", ghSpec, lookupNoPackage, false, "github-releases:iwamot/pkgwhen: repository not found on github (or private; set GITHUB_TOKEN or run `gh auth login`)"},
-		{"repository with a token", ghSpec, lookupNoPackage, true, "github-releases:iwamot/pkgwhen: repository not found on github (or private, and the token cannot see it)"},
+		{"version", pypiSpec, lookupNoVersion, others, false, "pypi:foo@1.2.3: version not found; latest is 1.3.2 (yanked), published 45d ago; run `pkgwhen pypi:foo` to see the versions that exist"},
+		{"version, with nothing to name", pypiSpec, lookupNoVersion, nil, false, "pypi:foo@1.2.3: version not found; run `pkgwhen pypi:foo` to see the versions that exist"},
+		{"package on pypi", spec.Spec{Registry: "pypi", Name: "foo"}, lookupNoPackage, nil, false, "pypi:foo: package not found on pypi (or not visible yet); check the name"},
+		{"package on npm", npmSpec, lookupNoPackage, nil, false, "npm:@types/node: package not found on npm (or not visible yet); check the name"},
+		{"repository without a token", ghSpec, lookupNoPackage, nil, false, "github-releases:iwamot/pkgwhen: repository not found on github (or private; set GITHUB_TOKEN or run `gh auth login`)"},
+		{"repository with a token", ghSpec, lookupNoPackage, nil, true, "github-releases:iwamot/pkgwhen: repository not found on github (or private, and the token cannot see it)"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := notFound(tt.s, tt.kind, tt.haveToken); got != tt.want {
+			if got := notFound(tt.s, tt.kind, tt.others, now, tt.haveToken); got != tt.want {
 				t.Errorf("notFound = %q, want %q", got, tt.want)
 			}
 		})
