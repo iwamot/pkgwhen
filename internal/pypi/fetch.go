@@ -1,7 +1,7 @@
 package pypi
 
 import (
-	"fmt"
+	"time"
 
 	"github.com/iwamot/pkgwhen/internal/fetch"
 	"github.com/iwamot/pkgwhen/internal/release"
@@ -21,7 +21,7 @@ func List(name string) (rs []release.Release, found bool, err error) {
 	case 404:
 		return nil, false, nil
 	default:
-		return nil, false, fmt.Errorf("HTTP %d", resp.Status)
+		return nil, false, fetch.StatusError(resp, time.Now().UTC())
 	}
 }
 
@@ -39,6 +39,6 @@ func One(name, v string) (r release.Release, found bool, err error) {
 	case 404:
 		return release.Release{}, false, nil
 	default:
-		return release.Release{}, false, fmt.Errorf("HTTP %d", resp.Status)
+		return release.Release{}, false, fetch.StatusError(resp, time.Now().UTC())
 	}
 }

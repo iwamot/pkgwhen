@@ -44,7 +44,7 @@ Or download a prebuilt binary from the [Releases page](https://github.com/iwamot
 Then tell the agent to use it, in `CLAUDE.md`, `AGENTS.md`, or whichever file your agent reads:
 
 ```markdown
-To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version, `--min-age 1d` to list only versions old enough to pass a one-day release age, and `--since 30d` for versions published in the last 30 days. A mark means dependency updaters usually skip that version, so a newer marked version is not a reason to expect a PR. Exit 1 means the version does not exist (yet); rerun while it exits 1, and stop and read stderr on any other exit code.
+To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version on its own; it cannot be combined with the options that narrow a list. To narrow a list, use `--min-age 1d` for versions old enough to pass a one-day release age, or `--since 30d` for versions published in the last 30 days. A mark means dependency updaters usually skip that version, so a newer marked version is not a reason to expect a PR. Exit 1 means the version does not exist (yet); rerun while it exits 1, and stop and read stderr on any other exit code. On exit 0, stderr says why a table is empty or cut short.
 ```
 
 That paragraph is all the agent needs. `pkgwhen --instructions` prints the same paragraph, for setup scripts and machines where this page is not at hand.
@@ -55,12 +55,14 @@ Checking whether a version has passed a one-day release age. Only versions publi
 
 ```
 $ pkgwhen --min-age 1d -n 3 npm:@types/node
+pkgwhen: 2356 more versions; pass -n N or --all to see them
 VERSION  PUBLISHED   AGE
 26.4.1   2026-09-01  4d
 26.4.0   2026-08-27  10d
 26.3.0   2026-08-24  12d
-... and 2356 more (pass -n N or --all)
 ```
+
+Only the table goes to stdout. Anything the answer needs a sentence for — a cut list, a window that dropped everything — is a `pkgwhen:` line on stderr, so `awk` over stdout reads rows and nothing else.
 
 A window that leaves nothing says why on stderr, and names the nearest version it dropped, so an empty table is never silent:
 
@@ -89,6 +91,14 @@ The first release of a brand-new package is the one wait that needs both codes, 
 
 ```
 $ until pkgwhen npm:welt-io-x@1.0.0; do rc=$?; [ $rc -eq 1 ] || [ $rc -eq 4 ] || break; sleep 30; done
+```
+
+A repository that tags without publishing releases. The table is empty and the exit code is 0, because the name was found and the answer is simply that there is nothing to list:
+
+```
+$ pkgwhen github-releases:iwamot/blog
+pkgwhen: no releases published (the repository may have tags but no releases)
+VERSION  PUBLISHED  AGE
 ```
 
 The same list as JSON, for a script that compares rather than reads:
@@ -128,9 +138,10 @@ Examples:
 
 REGISTRY is pypi, npm, or github-releases. NAME is the package name, or
 OWNER/REPO for GitHub. Versions are printed newest first by publish date,
-at most 20 unless -n or --all is given. With @VERSION, only that version
-is printed, with the time of day, and the options that narrow a list do
-not apply.
+at most 20 unless -n or --all is given; the two contradict each other and
+are not accepted together. With @VERSION, only that version is printed,
+with the time of day, and the options that narrow a list are refused
+rather than ignored.
 
 Options:
   --min-age DUR   only versions published more than DUR ago (1d, 36h, 2w)
@@ -165,7 +176,8 @@ Exit codes:
 - npm: the full packument is fetched, because only it carries publish dates. For a large package that is a few megabytes, compressed in transit.
 - PyPI: a version's date is the earliest upload among its files, which is the moment uv's `exclude-newer` treats it as available. A version is marked `yanked` when any of its files is, which is how Renovate reads it. Versions with no files are left out.
 - GitHub: the date is `published_at`, which is what Renovate uses and which can trail the draft's creation by as long as the draft took to finish. Draft releases are dropped. `GITHUB_TOKEN`, `GH_TOKEN`, or `gh auth token` is used when available; without one, the API allows 60 requests an hour. Either that limit or the short-term one is reported as a rate limit with how long to wait, rather than as a bare 403. Releases are read in the order GitHub returns them, newest created first, and only as many pages as the requested count needs unless a date option or `--all` is given.
-- An empty answer says which kind it is. A window that dropped everything names the nearest version it dropped, on stderr, and still exits 0. A version the registry does not have exits 1 and names the latest one that does exist; a package or repository it does not have exits 4, because the next step differs: wait, or check the name.
+- An empty answer says which kind it is, on stderr, and still exits 0. A window that dropped everything names the nearest version it dropped; a package the registry has but with nothing to list — a GitHub repository that tags without releasing, say — says that instead. A version the registry does not have exits 1 and names the latest one that does exist; a package or repository it does not have exits 4, because the next step differs: wait, or check the name.
+- A registry answer that is neither the document nor a 404 exits 3 and carries the next step: a rate limit says how long to wait, a 5xx says the registry is failing and to retry later, and any other status says the registry is refusing this request, where a second try is the most that helps.
 - Nothing is cached and nothing is written. Every call asks the registry.
 - While the version is 0.x, the exit codes and the shape of the output can still change between releases; from 1.0 they only gain cases.
 

@@ -113,6 +113,19 @@ func Note(rs []Release, now time.Time, w Window) string {
 	return fmt.Sprintf("%s; %s is %s", head, label, Describe(*nearest, now))
 }
 
+// NoVersions explains a package the registry has with nothing to list, so
+// that an empty table is never the whole answer. On GitHub this is a
+// repository that tags without ever publishing a release, which is common
+// enough to name; on the other two nothing empties the list once the
+// package itself was found except a version whose files carry no date, so
+// that is what the wording says.
+func NoVersions(registry string) string {
+	if registry == "github-releases" {
+		return "no releases published (the repository may have tags but no releases)"
+	}
+	return "no versions with a publish date"
+}
+
 // Sort orders newest first. Versions published at the same instant are
 // ordered by version string, descending, so the output is stable.
 func Sort(rs []Release) {
@@ -209,9 +222,12 @@ func Line(r Release, now time.Time) string {
 	return line + "\n"
 }
 
-// More is the trailer printed when Limit cut the list.
+// More says how many versions the limit cut. It goes next to Note on
+// stderr, so stdout carries the table alone and a caller can read the rows
+// with awk; the wording is a sentence with its remediation, like the rest
+// of the lines there.
 func More(n int) string {
-	return fmt.Sprintf("... and %d more (pass -n N or --all)\n", n)
+	return fmt.Sprintf("%d more versions; pass -n N or --all to see them", n)
 }
 
 type document struct {

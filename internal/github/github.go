@@ -10,7 +10,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -99,33 +98,13 @@ func StatusError(resp fetch.Response, haveToken bool, now time.Time) error {
 		if resp.Status == http.StatusForbidden {
 			return errors.New("HTTP 403; the token may lack access to this repository")
 		}
-		return fmt.Errorf("HTTP %d", resp.Status)
+		return fetch.StatusError(resp, now)
 	}
-	msg := RateLimited(resp, now)
+	msg := fetch.RateLimited(resp, now)
 	if !haveToken {
 		msg += "; set GITHUB_TOKEN or run `gh auth login`"
 	}
 	return errors.New(msg)
-}
-
-// RateLimited says how long to wait. GitHub sends Retry-After for the
-// short-term limit and X-RateLimit-Reset for the hourly one, so whichever
-// arrived decides the wording; with neither, or with a reset that has
-// already passed, the docs say to wait a minute. The wait is relative
-// because the rest of the output is, and a caller reading it may not know
-// the current time.
-func RateLimited(resp fetch.Response, now time.Time) string {
-	if s, err := strconv.Atoi(strings.TrimSpace(resp.RetryAfter)); err == nil && s > 0 {
-		return fmt.Sprintf("rate limited; retry after %ds", s)
-	}
-	if resp.RateLimitRemaining == "0" {
-		if sec, err := strconv.ParseInt(strings.TrimSpace(resp.RateLimitReset), 10, 64); err == nil {
-			if reset := time.Unix(sec, 0).UTC(); reset.After(now) {
-				return fmt.Sprintf("rate limited for %s", release.Age(reset, now))
-			}
-		}
-	}
-	return "rate limited; wait at least a minute"
 }
 
 // Headers builds the request headers, adding the token when there is one.

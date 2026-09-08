@@ -87,7 +87,8 @@ func TestStatusError(t *testing.T) {
 		{"a reset that does not parse", fetch.Response{Status: 403, RateLimitRemaining: "0", RateLimitReset: "soon"}, true, "rate limited; wait at least a minute"},
 		{"a retry-after that does not parse", fetch.Response{Status: 403, RetryAfter: "Wed, 21 Oct 2026 07:28:00 GMT"}, true, "rate limited; wait at least a minute"},
 		{"403 that is not a limit", fetch.Response{Status: 403, RateLimitRemaining: "12"}, true, "HTTP 403; the token may lack access to this repository"},
-		{"another status", fetch.Response{Status: 500, RateLimitRemaining: "0"}, true, "HTTP 500"},
+		{"a server error is delegated", fetch.Response{Status: 500, RateLimitRemaining: "0"}, true, "HTTP 500; the registry is failing, retry later"},
+		{"another status is delegated", fetch.Response{Status: 451, RateLimitRemaining: "0"}, true, "unexpected HTTP 451; retry once, and if it persists the registry is rejecting the request"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
