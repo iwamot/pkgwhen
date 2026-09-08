@@ -58,7 +58,7 @@ func TestDecode(t *testing.T) {
 }
 
 func TestDecodeErrors(t *testing.T) {
-	if _, err := Decode([]byte(`[]`)); err == nil || !strings.Contains(err.Error(), "npm:") {
+	if _, err := Decode([]byte(`[]`)); err == nil {
 		t.Errorf("bad json err = %v", err)
 	}
 	bad := []byte(`{"versions": {"1.0.0": {}}, "time": {"1.0.0": "yesterday"}}`)

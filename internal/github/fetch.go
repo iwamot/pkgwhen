@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/iwamot/pkgwhen/internal/fetch"
 	"github.com/iwamot/pkgwhen/internal/release"
@@ -41,7 +42,7 @@ func List(repo, token string, want int) (rs []release.Release, found bool, err e
 		case 404:
 			return nil, false, nil
 		default:
-			return nil, false, StatusError(url, resp.Status, resp.RateLimitRemaining)
+			return nil, false, StatusError(resp, token != "", time.Now().UTC())
 		}
 		page, err := DecodeList(resp.Body)
 		if err != nil {
@@ -73,27 +74,8 @@ func One(repo, tag, token string) (r release.Release, found bool, err error) {
 		case 404:
 			continue
 		default:
-			return release.Release{}, false, StatusError(url, resp.Status, resp.RateLimitRemaining)
+			return release.Release{}, false, StatusError(resp, token != "", time.Now().UTC())
 		}
 	}
 	return release.Release{}, false, nil
-}
-
-// Exists reports whether the repository can be read with this token. GitHub
-// answers 404 for a private repository as well as a missing one, so a false
-// here means "not visible", which is what the message has to say.
-func Exists(repo, token string) (bool, error) {
-	url := ListURL(repo)
-	resp, err := fetch.Get(url, Headers(token))
-	if err != nil {
-		return false, err
-	}
-	switch resp.Status {
-	case 200:
-		return true, nil
-	case 404:
-		return false, nil
-	default:
-		return false, StatusError(url, resp.Status, resp.RateLimitRemaining)
-	}
 }

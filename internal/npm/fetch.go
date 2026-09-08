@@ -21,6 +21,6 @@ func List(name string) (rs []release.Release, found bool, err error) {
 	case 404:
 		return nil, false, nil
 	default:
-		return nil, false, fmt.Errorf("npm: %s: HTTP %d", URL(name), resp.Status)
+		return nil, false, fmt.Errorf("HTTP %d", resp.Status)
 	}
 }

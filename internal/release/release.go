@@ -110,7 +110,7 @@ func Note(rs []Release, now time.Time, w Window) string {
 	if tooNew {
 		label = "newest"
 	}
-	return fmt.Sprintf("%s; %s is %s, published %s ago", head, label, nearest.Version, Age(now, nearest.Published))
+	return fmt.Sprintf("%s; %s is %s", head, label, Describe(*nearest, now))
 }
 
 // Sort orders newest first. Versions published at the same instant are
@@ -145,9 +145,34 @@ func Age(now, t time.Time) string {
 		return fmt.Sprintf("%dd", int(d.Hours())/24)
 	case d >= time.Hour:
 		return fmt.Sprintf("%dh", int(d.Hours()))
-	default:
+	case d >= time.Minute:
 		return fmt.Sprintf("%dm", int(d.Minutes()))
+	default:
+		return fmt.Sprintf("%ds", int(d.Seconds()))
 	}
+}
+
+// Latest is the release published most recently. ok is false for an empty
+// list, which is what a package with no usable versions comes back as.
+func Latest(rs []Release) (r Release, ok bool) {
+	for _, c := range rs {
+		if !ok || c.Published.After(r.Published) {
+			r, ok = c, true
+		}
+	}
+	return r, ok
+}
+
+// Describe names one release for a message that has no table under it: the
+// version, its marks, and how long ago it went out. The marks are spelled
+// out because these messages print alone, so there is no row to read them
+// from.
+func Describe(r Release, now time.Time) string {
+	s := r.Version
+	if m := r.Marks(); len(m) > 0 {
+		s += " (" + strings.Join(m, ", ") + ")"
+	}
+	return fmt.Sprintf("%s, published %s ago", s, Age(now, r.Published))
 }
 
 // Table renders the list as aligned columns with a header. Dates are shown

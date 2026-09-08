@@ -47,7 +47,7 @@ func VersionURL(name, v string) string {
 func DecodeProject(data []byte) ([]release.Release, error) {
 	var p project
 	if err := json.Unmarshal(data, &p); err != nil {
-		return nil, fmt.Errorf("pypi: %w", err)
+		return nil, err
 	}
 	var out []release.Release
 	for v, files := range p.Releases {
@@ -66,14 +66,14 @@ func DecodeProject(data []byte) ([]release.Release, error) {
 func DecodeVersion(data []byte) (release.Release, error) {
 	var d version
 	if err := json.Unmarshal(data, &d); err != nil {
-		return release.Release{}, fmt.Errorf("pypi: %w", err)
+		return release.Release{}, err
 	}
 	r, ok, err := fromFiles(d.Info.Version, d.URLs)
 	if err != nil {
 		return release.Release{}, err
 	}
 	if !ok {
-		return release.Release{}, fmt.Errorf("pypi: version %s has no files, so no upload date", d.Info.Version)
+		return release.Release{}, fmt.Errorf("version %s has no files, so no upload date", d.Info.Version)
 	}
 	return r, nil
 }
@@ -86,7 +86,7 @@ func fromFiles(v string, files []file) (release.Release, bool, error) {
 	for _, f := range files {
 		t, err := time.Parse(time.RFC3339Nano, f.UploadTime)
 		if err != nil {
-			return release.Release{}, false, fmt.Errorf("pypi: version %s: %w", v, err)
+			return release.Release{}, false, fmt.Errorf("version %s: %w", v, err)
 		}
 		if r.Published.IsZero() || t.Before(r.Published) {
 			r.Published = t

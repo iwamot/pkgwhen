@@ -48,7 +48,7 @@ func TestDecodeProject(t *testing.T) {
 }
 
 func TestDecodeProjectErrors(t *testing.T) {
-	if _, err := DecodeProject([]byte(`not json`)); err == nil || !strings.Contains(err.Error(), "pypi:") {
+	if _, err := DecodeProject([]byte(`not json`)); err == nil {
 		t.Errorf("bad json err = %v", err)
 	}
 	bad := []byte(`{"releases": {"1.0": [{"upload_time_iso_8601": "yesterday"}]}}`)

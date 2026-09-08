@@ -1,9 +1,12 @@
 package github
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/iwamot/pkgwhen/internal/fetch"
 )
 
 func TestURLs(t *testing.T) {
@@ -43,7 +46,7 @@ func TestDecodeList(t *testing.T) {
 	if got[1].Version != "v2.3.0-rc.1" || !got[1].Prerelease {
 		t.Errorf("release 1 = %+v", got[1])
 	}
-	if _, err := DecodeList([]byte(`{}`)); err == nil || !strings.Contains(err.Error(), "github:") {
+	if _, err := DecodeList([]byte(`{}`)); err == nil {
 		t.Errorf("bad json err = %v", err)
 	}
 	if _, err := DecodeList([]byte(`[{"tag_name": "v1", "published_at": "soon"}]`)); err == nil || !strings.Contains(err.Error(), "release v1") {
@@ -68,21 +71,30 @@ func TestDecodeOne(t *testing.T) {
 }
 
 func TestStatusError(t *testing.T) {
+	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
+	epoch := func(d time.Duration) string { return strconv.FormatInt(now.Add(d).Unix(), 10) }
 	tests := []struct {
-		status    int
-		remaining string
+		name      string
+		resp      fetch.Response
+		haveToken bool
 		want      string
 	}{
-		{403, "0", "rate limited; set GITHUB_TOKEN or run `gh auth login`"},
-		{403, "12", "HTTP 403"},
-		{403, "", "HTTP 403"},
-		{500, "0", "HTTP 500"},
+		{"hourly limit without a token", fetch.Response{Status: 403, RateLimitRemaining: "0", RateLimitReset: epoch(12 * time.Minute)}, false, "rate limited for 12m; set GITHUB_TOKEN or run `gh auth login`"},
+		{"hourly limit with a token", fetch.Response{Status: 403, RateLimitRemaining: "0", RateLimitReset: epoch(12 * time.Minute)}, true, "rate limited for 12m"},
+		{"retry-after wins over the reset", fetch.Response{Status: 429, RetryAfter: "30", RateLimitRemaining: "0", RateLimitReset: epoch(12 * time.Minute)}, true, "rate limited; retry after 30s"},
+		{"429 with no headers", fetch.Response{Status: 429}, true, "rate limited; wait at least a minute"},
+		{"a reset that has passed", fetch.Response{Status: 403, RateLimitRemaining: "0", RateLimitReset: epoch(-time.Minute)}, true, "rate limited; wait at least a minute"},
+		{"a reset that does not parse", fetch.Response{Status: 403, RateLimitRemaining: "0", RateLimitReset: "soon"}, true, "rate limited; wait at least a minute"},
+		{"a retry-after that does not parse", fetch.Response{Status: 403, RetryAfter: "Wed, 21 Oct 2026 07:28:00 GMT"}, true, "rate limited; wait at least a minute"},
+		{"403 that is not a limit", fetch.Response{Status: 403, RateLimitRemaining: "12"}, true, "HTTP 403; the token may lack access to this repository"},
+		{"another status", fetch.Response{Status: 500, RateLimitRemaining: "0"}, true, "HTTP 500"},
 	}
 	for _, tt := range tests {
-		got := StatusError("https://api.github.com/x", tt.status, tt.remaining).Error()
-		if !strings.HasPrefix(got, "github: https://api.github.com/x: ") || !strings.Contains(got, tt.want) {
-			t.Errorf("StatusError(%d, %q) = %q, want containing %q", tt.status, tt.remaining, got, tt.want)
-		}
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StatusError(tt.resp, tt.haveToken, now).Error(); got != tt.want {
+				t.Errorf("StatusError = %q, want %q", got, tt.want)
+			}
+		})
 	}
 }
 

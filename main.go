@@ -19,11 +19,15 @@ import (
 	"github.com/iwamot/pkgwhen/internal/spec"
 )
 
+// Exit codes. A missing version and a missing package are separate because
+// a caller waiting in a loop keeps going on the first and has to stop on
+// the second: only the version can still turn up.
 const (
-	exitOK       = 0
-	exitNotFound = 1
-	exitUsage    = 2
-	exitRegistry = 3
+	exitOK        = 0
+	exitNoVersion = 1
+	exitUsage     = 2
+	exitRegistry  = 3
+	exitNoPackage = 4
 )
 
 const devVersion = "0.0.0-dev"
@@ -37,6 +41,7 @@ const helpText = `pkgwhen — list a package's versions with the date each was p
 Usage:
   pkgwhen [options] REGISTRY:NAME[@VERSION]
 
+Examples:
   pkgwhen pypi:openai-agents
   pkgwhen npm:@types/node@22.0.0
   pkgwhen github-releases:jdx/aube --since 30d
@@ -58,6 +63,10 @@ Options:
   -v, --version   show the version
   --instructions  print the paragraph for the agent's instruction file
 
+Environment:
+  GITHUB_TOKEN, then GH_TOKEN, then ` + "`gh auth token`" + `, is used for
+  github-releases, and is required for a private repository.
+
 Marks at the end of a row:
   yanked      the version was yanked (PyPI)
   deprecated  the version is deprecated (npm)
@@ -65,9 +74,10 @@ Marks at the end of a row:
 
 Exit codes:
   0  printed
-  1  the package, or the version given with @VERSION, does not exist
+  1  the version given with @VERSION does not exist
   2  usage error: fix the flags or the argument
   3  registry error: check the token or the network, then retry
+  4  the package, or the repository on GitHub, does not exist
 `
 
 // instructionsText is the paragraph a coding agent needs in order to use
@@ -75,7 +85,7 @@ Exit codes:
 // the agent's own expectations, and what exit 1 means. Which marks exist is
 // in --help and in the rows, so only what to do about one is here.
 // README.md quotes it verbatim.
-const instructionsText = "To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version, `--min-age 1d` to list only versions old enough to pass a one-day release age, and `--since 30d` for versions published in the last 30 days. A mark means dependency updaters usually skip that version, so a newer marked version is not a reason to expect a PR. Exit 1 means the package or version does not exist (yet); rerun while it exits 1, and stop and read stderr on any other exit code.\n"
+const instructionsText = "To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version, `--min-age 1d` to list only versions old enough to pass a one-day release age, and `--since 30d` for versions published in the last 30 days. A mark means dependency updaters usually skip that version, so a newer marked version is not a reason to expect a PR. Exit 1 means the version does not exist (yet); rerun while it exits 1, and stop and read stderr on any other exit code.\n"
 
 type cliArgs struct {
 	showHelp         bool
@@ -249,52 +259,62 @@ func list(s spec.Spec, want int, token string) ([]release.Release, bool, error) 
 
 // one fetches the version named in s, and says which half is missing when it
 // is not there. PyPI and GitHub answer a missing version and a missing
-// package with the same 404, so they cost one more request on that path only.
-func one(s spec.Spec, token string) (release.Release, lookup, error) {
+// package with the same 404, so they read the list on that path only; that
+// list is returned as others, because the message names the latest version
+// that does exist and nothing else prints it.
+func one(s spec.Spec, token string) (r release.Release, kind lookup, others []release.Release, err error) {
 	switch s.Registry {
 	case "pypi":
 		r, found, err := pypi.One(s.Name, s.Version)
 		if err != nil || found {
-			return r, lookupFound, err
+			return r, lookupFound, nil, err
 		}
-		exists, err := pypi.Exists(s.Name)
+		rs, exists, err := pypi.List(s.Name)
 		if err != nil {
-			return release.Release{}, lookupFound, err
+			return release.Release{}, lookupFound, nil, err
 		}
-		return release.Release{}, missing(exists), nil
+		return release.Release{}, missing(exists), rs, nil
 	case "npm":
 		rs, found, err := npm.List(s.Name)
 		if err != nil {
-			return release.Release{}, lookupFound, err
+			return release.Release{}, lookupFound, nil, err
 		}
 		if !found {
-			return release.Release{}, lookupNoPackage, nil
+			return release.Release{}, lookupNoPackage, nil, nil
 		}
 		for _, r := range rs {
 			if r.Version == s.Version {
-				return r, lookupFound, nil
+				return r, lookupFound, nil, nil
 			}
 		}
-		return release.Release{}, lookupNoVersion, nil
+		return release.Release{}, lookupNoVersion, rs, nil
 	default:
 		r, found, err := github.One(s.Name, s.Version, token)
 		if err != nil || found {
-			return r, lookupFound, err
+			return r, lookupFound, nil, err
 		}
-		exists, err := github.Exists(s.Name, token)
+		// The first page answers both questions: whether the repository is
+		// visible at all, and which release is the newest.
+		rs, exists, err := github.List(s.Name, token, 1)
 		if err != nil {
-			return release.Release{}, lookupFound, err
+			return release.Release{}, lookupFound, nil, err
 		}
-		return release.Release{}, missing(exists), nil
+		return release.Release{}, missing(exists), rs, nil
 	}
 }
 
-// notFound words the exit-1 line. A missing version sends the caller to the
-// list; a missing name sends them to check it, or on GitHub to the token,
-// because a private repository answers 404 there just like a missing one.
-func notFound(s spec.Spec, kind lookup, haveToken bool) string {
+// notFound words the exit-1 and exit-4 lines. A missing version names the
+// newest one that does exist, because nothing else is printed to read it
+// from; a missing name sends the caller to check it, or on GitHub to the
+// token, because a private repository answers 404 there just like a missing
+// one.
+func notFound(s spec.Spec, kind lookup, others []release.Release, now time.Time, haveToken bool) string {
 	if kind == lookupNoVersion {
-		return fmt.Sprintf("%s: version not found; run `pkgwhen %s:%s` to see the versions that exist", s, s.Registry, s.Name)
+		msg := fmt.Sprintf("%s: version not found", s)
+		if latest, ok := release.Latest(others); ok {
+			msg += "; latest is " + release.Describe(latest, now)
+		}
+		return msg + fmt.Sprintf("; run `pkgwhen %s:%s` to see the versions that exist", s.Registry, s.Name)
 	}
 	switch s.Registry {
 	case "github-releases":
@@ -339,14 +359,17 @@ func run(argv []string, stdout, stderr io.Writer) int {
 		token = github.Token()
 	}
 	if a.spec.Version != "" {
-		r, kind, err := one(a.spec, token)
+		r, kind, others, err := one(a.spec, token)
 		if err != nil {
-			fmt.Fprintln(stderr, "pkgwhen:", err)
+			fmt.Fprintf(stderr, "pkgwhen: %s: %v\n", a.spec, err)
 			return exitRegistry
 		}
 		if kind != lookupFound {
-			fmt.Fprintf(stderr, "pkgwhen: %s\n", notFound(a.spec, kind, token != ""))
-			return exitNotFound
+			fmt.Fprintf(stderr, "pkgwhen: %s\n", notFound(a.spec, kind, others, now, token != ""))
+			if kind == lookupNoPackage {
+				return exitNoPackage
+			}
+			return exitNoVersion
 		}
 		if a.asJSON {
 			fmt.Fprint(stdout, release.JSON(a.spec.Registry, a.spec.Name, []release.Release{r}, 0, now))
@@ -364,12 +387,12 @@ func run(argv []string, stdout, stderr io.Writer) int {
 	}
 	rs, found, err := list(a.spec, want, token)
 	if err != nil {
-		fmt.Fprintln(stderr, "pkgwhen:", err)
+		fmt.Fprintf(stderr, "pkgwhen: %s: %v\n", a.spec, err)
 		return exitRegistry
 	}
 	if !found {
-		fmt.Fprintf(stderr, "pkgwhen: %s\n", notFound(a.spec, lookupNoPackage, token != ""))
-		return exitNotFound
+		fmt.Fprintf(stderr, "pkgwhen: %s\n", notFound(a.spec, lookupNoPackage, nil, now, token != ""))
+		return exitNoPackage
 	}
 	// Said before the empty table, so the reason for the empty result reads
 	// ahead of it, and on stderr so --json still writes only the document.
