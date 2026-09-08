@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -59,7 +60,13 @@ func TestParseArgs(t *testing.T) {
 		}), ""},
 		{"limit", []string{"-n", "5", "pypi:openai-agents"}, with(func(a *cliArgs) { a.spec = pypi; a.limit = 5 }), ""},
 		{"all", []string{"--all", "pypi:openai-agents"}, with(func(a *cliArgs) { a.spec = pypi; a.limit = 0 }), ""},
-		{"all then limit", []string{"--all", "-n", "3", "pypi:openai-agents"}, with(func(a *cliArgs) { a.spec = pypi; a.limit = 3 }), ""},
+		{"all then limit", []string{"--all", "-n", "3", "pypi:openai-agents"}, cliArgs{}, "-n and --all contradict each other; drop one"},
+		{"limit then all", []string{"-n", "3", "--all", "pypi:openai-agents"}, cliArgs{}, "-n and --all contradict each other; drop one"},
+		{"limit and all without a package", []string{"-n", "3", "--all"}, cliArgs{}, "no package given"},
+		{"limit and all with help", []string{"--help", "-n", "3", "--all"}, with(func(a *cliArgs) {
+			a.showHelp = true
+			a.limit = 0
+		}), ""},
 		{"json", []string{"--json", "pypi:openai-agents"}, with(func(a *cliArgs) { a.spec = pypi; a.asJSON = true }), ""},
 		{"help short", []string{"-h"}, with(func(a *cliArgs) { a.showHelp = true }), ""},
 		{"help long", []string{"--help"}, with(func(a *cliArgs) { a.showHelp = true }), ""},
@@ -69,7 +76,7 @@ func TestParseArgs(t *testing.T) {
 		{"no spec", nil, cliArgs{}, "no package given"},
 		{"bad spec", []string{"openai-agents"}, cliArgs{}, "want REGISTRY:NAME"},
 		{"two specs", []string{"pypi:a", "pypi:b"}, cliArgs{}, "one package per call"},
-		{"unknown flag", []string{"--bogus", "pypi:a"}, cliArgs{}, "unknown flag"},
+		{"unknown flag", []string{"--bogus", "pypi:a"}, cliArgs{}, "unknown flag \"--bogus\"; run `pkgwhen --help` for the options"},
 		{"limit missing value", []string{"pypi:a", "-n"}, cliArgs{}, "-n needs a value"},
 		{"limit zero", []string{"-n", "0", "pypi:a"}, cliArgs{}, "positive integer"},
 		{"limit not a number", []string{"-n", "x", "pypi:a"}, cliArgs{}, "positive integer"},
@@ -155,6 +162,37 @@ func TestDeadOptionsError(t *testing.T) {
 	}
 }
 
+func TestNotes(t *testing.T) {
+	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
+	rs := []release.Release{
+		{Version: "1.1.0", Published: now.Add(-2 * time.Hour)},
+		{Version: "1.0.0", Published: now.Add(-72 * time.Hour)},
+	}
+	day := 24 * time.Hour
+	tests := []struct {
+		name     string
+		registry string
+		all      []release.Release
+		cut      int
+		window   release.Window
+		want     []string
+	}{
+		{"a full table says nothing", "pypi", rs, 0, release.Window{}, nil},
+		{"a cut table says how much was cut", "pypi", rs, 118, release.Window{}, []string{"118 more versions; pass -n N or --all to see them"}},
+		{"nothing to list at all", "github-releases", nil, 0, release.Window{}, []string{"no releases published (the repository may have tags but no releases)"}},
+		{"nothing to list, on the other registries", "npm", nil, 0, release.Window{}, []string{"no versions with a publish date"}},
+		{"an empty list is not blamed on the window", "pypi", nil, 0, release.Window{Since: day, SinceSet: true, SinceText: "1d"}, []string{"no versions with a publish date"}},
+		{"a window that dropped everything", "pypi", rs, 0, release.Window{MinAge: 7 * day, MinAgeSet: true, MinAgeText: "7d"}, []string{"no version is older than 7d; newest is 1.1.0, published 2h ago"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := notes(tt.registry, tt.all, tt.cut, now, tt.window); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("notes = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestResolveVersion(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -191,6 +229,7 @@ func TestRunOffline(t *testing.T) {
 		{"instructions", []string{"--instructions"}, exitOK, "use `pkgwhen` instead of curl", ""},
 		{"usage error", []string{"cargo:serde"}, exitUsage, "", "pkgwhen: unknown registry"},
 		{"contradictory window", []string{"--min-age", "7d", "--since", "1d", "pypi:x"}, exitUsage, "", "nothing can match"},
+		{"n with all", []string{"-n", "2", "--all", "pypi:x"}, exitUsage, "", "contradict each other"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -206,6 +245,19 @@ func TestRunOffline(t *testing.T) {
 				t.Errorf("stderr = %q, want containing %q", stderr.String(), tt.wantStderr)
 			}
 		})
+	}
+}
+
+// The paragraph lives in three places: here, README.md, and whichever
+// instruction file a user pasted it into. The copy outside the repo is a
+// release-time chore, but the one in README.md is checkable.
+func TestREADMEQuotesInstructions(t *testing.T) {
+	readme, err := os.ReadFile("README.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(readme), instructionsText) {
+		t.Error("README.md does not quote instructionsText verbatim")
 	}
 }
 

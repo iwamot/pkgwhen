@@ -220,7 +220,7 @@ func TestLine(t *testing.T) {
 }
 
 func TestMore(t *testing.T) {
-	if got := More(3796); got != "... and 3796 more (pass -n N or --all)\n" {
+	if got := More(3796); got != "3796 more versions; pass -n N or --all to see them" {
 		t.Errorf("More = %q", got)
 	}
 }
@@ -258,5 +258,18 @@ func TestJSON(t *testing.T) {
 	}
 	if got := JSON("npm", "x", nil, 0, now); !strings.Contains(got, `"versions": []`) {
 		t.Errorf("JSON(nil) = %s", got)
+	}
+}
+
+func TestNoVersions(t *testing.T) {
+	tests := []struct{ registry, want string }{
+		{"github-releases", "no releases published (the repository may have tags but no releases)"},
+		{"pypi", "no versions with a publish date"},
+		{"npm", "no versions with a publish date"},
+	}
+	for _, tt := range tests {
+		if got := NoVersions(tt.registry); got != tt.want {
+			t.Errorf("NoVersions(%q) = %q, want %q", tt.registry, got, tt.want)
+		}
 	}
 }

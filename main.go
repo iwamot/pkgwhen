@@ -48,9 +48,10 @@ Examples:
 
 REGISTRY is pypi, npm, or github-releases. NAME is the package name, or
 OWNER/REPO for GitHub. Versions are printed newest first by publish date,
-at most 20 unless -n or --all is given. With @VERSION, only that version
-is printed, with the time of day, and the options that narrow a list do
-not apply.
+at most 20 unless -n or --all is given; the two contradict each other and
+are not accepted together. With @VERSION, only that version is printed,
+with the time of day, and the options that narrow a list are refused
+rather than ignored.
 
 Options:
   --min-age DUR   only versions published more than DUR ago (1d, 36h, 2w)
@@ -85,7 +86,7 @@ Exit codes:
 // the agent's own expectations, and what exit 1 means. Which marks exist is
 // in --help and in the rows, so only what to do about one is here.
 // README.md quotes it verbatim.
-const instructionsText = "To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version, `--min-age 1d` to list only versions old enough to pass a one-day release age, and `--since 30d` for versions published in the last 30 days. A mark means dependency updaters usually skip that version, so a newer marked version is not a reason to expect a PR. Exit 1 means the version does not exist (yet); rerun while it exits 1, and stop and read stderr on any other exit code.\n"
+const instructionsText = "To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version on its own; it cannot be combined with the options that narrow a list. To narrow a list, use `--min-age 1d` for versions old enough to pass a one-day release age, or `--since 30d` for versions published in the last 30 days. A mark means dependency updaters usually skip that version, so a newer marked version is not a reason to expect a PR. Exit 1 means the version does not exist (yet); rerun while it exits 1, and stop and read stderr on any other exit code. On exit 0, stderr says why a table is empty or cut short.\n"
 
 type cliArgs struct {
 	showHelp         bool
@@ -155,7 +156,7 @@ func parseArgs(argv []string) (cliArgs, error) {
 			}
 		default:
 			if strings.HasPrefix(arg, "-") {
-				return cliArgs{}, fmt.Errorf("unknown flag: %s", arg)
+				return cliArgs{}, fmt.Errorf("unknown flag %q; run `pkgwhen --help` for the options", arg)
 			}
 			if haveSpec {
 				return cliArgs{}, fmt.Errorf("one package per call, got %q and %q", a.spec, arg)
@@ -192,6 +193,13 @@ func parseArgs(argv []string) (cliArgs, error) {
 		if len(dead) > 0 {
 			return cliArgs{}, deadOptionsError(dead)
 		}
+	}
+	// -n and --all ask for two different lengths, and which one wins is
+	// decided by the order they were typed. The same pair is already refused
+	// next to @VERSION, so refusing it here keeps one answer to the question
+	// of what an option that cannot take effect does.
+	if haveSpec && limitGiven && allGiven {
+		return cliArgs{}, fmt.Errorf("-n and --all contradict each other; drop one")
 	}
 	// A --min-age longer than --since leaves no room between the edges, so no
 	// version can ever match and waiting will not help. Equal edges are left
@@ -327,6 +335,26 @@ func notFound(s spec.Spec, kind lookup, others []release.Release, now time.Time,
 	}
 }
 
+// notes lists what a successful call still owes the caller in words: why
+// the table is empty, and how much of it was cut. They go to stderr, ahead
+// of the table, so the reason reads before the rows it explains and stdout
+// carries the table alone. all is the list as the registry gave it, before
+// the window narrowed it: with nothing in it the window note would blame
+// the window for a list that was empty to begin with, so the two are
+// exclusive.
+func notes(registry string, all []release.Release, cut int, now time.Time, w release.Window) []string {
+	var out []string
+	if len(all) == 0 {
+		out = append(out, release.NoVersions(registry))
+	} else if note := release.Note(all, now, w); note != "" {
+		out = append(out, note)
+	}
+	if cut > 0 {
+		out = append(out, release.More(cut))
+	}
+	return out
+}
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -394,21 +422,22 @@ func run(argv []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "pkgwhen: %s\n", notFound(a.spec, lookupNoPackage, nil, now, token != ""))
 		return exitNoPackage
 	}
-	// Said before the empty table, so the reason for the empty result reads
-	// ahead of it, and on stderr so --json still writes only the document.
-	if note := release.Note(rs, now, a.window); note != "" {
-		fmt.Fprintf(stderr, "pkgwhen: %s\n", note)
-	}
-	rs = release.Filter(rs, now, a.window)
-	release.Sort(rs)
-	rs, more := release.Limit(rs, a.limit)
+	kept := release.Filter(rs, now, a.window)
+	release.Sort(kept)
+	kept, more := release.Limit(kept, a.limit)
+	// The trailer is a field in the JSON document, so only the table needs
+	// it said in words.
+	cut := more
 	if a.asJSON {
-		fmt.Fprint(stdout, release.JSON(a.spec.Registry, a.spec.Name, rs, more, now))
+		cut = 0
+	}
+	for _, n := range notes(a.spec.Registry, rs, cut, now, a.window) {
+		fmt.Fprintf(stderr, "pkgwhen: %s\n", n)
+	}
+	if a.asJSON {
+		fmt.Fprint(stdout, release.JSON(a.spec.Registry, a.spec.Name, kept, more, now))
 		return exitOK
 	}
-	fmt.Fprint(stdout, release.Table(rs, now))
-	if more > 0 {
-		fmt.Fprint(stdout, release.More(more))
-	}
+	fmt.Fprint(stdout, release.Table(kept, now))
 	return exitOK
 }
