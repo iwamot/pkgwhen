@@ -149,10 +149,7 @@ func Limit(rs []Release, n int) ([]Release, int) {
 // Age renders how long ago t was, as of now: days from one day up, hours
 // from one hour up, minutes below that. A future t reads as 0m.
 func Age(now, t time.Time) string {
-	d := now.Sub(t)
-	if d < 0 {
-		d = 0
-	}
+	d := max(now.Sub(t), 0)
 	switch {
 	case d >= 24*time.Hour:
 		return fmt.Sprintf("%dd", int(d.Hours())/24)
@@ -251,10 +248,7 @@ type entry struct {
 func JSON(registry, name string, rs []Release, more int, now time.Time) string {
 	doc := document{Registry: registry, Name: name, Versions: []entry{}, More: more}
 	for _, r := range rs {
-		age := now.Sub(r.Published)
-		if age < 0 {
-			age = 0
-		}
+		age := max(now.Sub(r.Published), 0)
 		doc.Versions = append(doc.Versions, entry{
 			Version:    r.Version,
 			Published:  r.Published.UTC().Format(time.RFC3339),
