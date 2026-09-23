@@ -293,10 +293,8 @@ func one(s spec.Spec, token string) (r release.Release, kind lookup, others []re
 		if !found {
 			return release.Release{}, lookupNoPackage, nil, nil
 		}
-		for _, r := range rs {
-			if r.Version == s.Version {
-				return r, lookupFound, nil, nil
-			}
+		if r, ok := release.Find(rs, s.Version); ok {
+			return r, lookupFound, nil, nil
 		}
 		return release.Release{}, lookupNoVersion, rs, nil
 	default:
@@ -362,6 +360,63 @@ func notes(registry string, all []release.Release, cut int, now time.Time, w rel
 	return out
 }
 
+// outcome is what a call leaves behind once the registry has answered: the
+// document for stdout, the lines for stderr, and the exit code. Building it
+// apart from the fetch keeps the output contract checkable without a
+// registry on the other end.
+type outcome struct {
+	stdout string
+	stderr []string
+	code   int
+}
+
+// oneOutcome answers @VERSION. A version not found prints nothing to
+// stdout, so a caller reading it never mistakes the message for the line.
+func oneOutcome(a cliArgs, r release.Release, kind lookup, others []release.Release, now time.Time, haveToken bool) outcome {
+	switch kind {
+	case lookupNoVersion:
+		return outcome{stderr: []string{notFound(a.spec, kind, others, now, haveToken)}, code: exitNoVersion}
+	case lookupNoPackage:
+		return outcome{stderr: []string{notFound(a.spec, kind, others, now, haveToken)}, code: exitNoPackage}
+	}
+	if a.asJSON {
+		return outcome{stdout: release.JSON(a.spec.Registry, a.spec.Name, []release.Release{r}, 0, now)}
+	}
+	return outcome{stdout: release.Line(r, now)}
+}
+
+// listOutcome answers a list. found is false when the package itself does
+// not exist. The count of versions cut is a field in the JSON document, so
+// only the table needs it said in words.
+func listOutcome(a cliArgs, rs []release.Release, found bool, now time.Time, haveToken bool) outcome {
+	if !found {
+		return outcome{stderr: []string{notFound(a.spec, lookupNoPackage, nil, now, haveToken)}, code: exitNoPackage}
+	}
+	kept := release.Filter(rs, now, a.window)
+	release.Sort(kept)
+	kept, more := release.Limit(kept, a.limit)
+	if a.asJSON {
+		return outcome{
+			stdout: release.JSON(a.spec.Registry, a.spec.Name, kept, more, now),
+			stderr: notes(a.spec.Registry, rs, 0, now, a.window),
+		}
+	}
+	return outcome{
+		stdout: release.Table(kept, now),
+		stderr: notes(a.spec.Registry, rs, more, now, a.window),
+	}
+}
+
+// emit writes o, stderr first so a reason reads before the rows it
+// explains, and returns its exit code.
+func emit(o outcome, stdout, stderr io.Writer) int {
+	for _, line := range o.stderr {
+		fmt.Fprintf(stderr, "pkgwhen: %s\n", line)
+	}
+	fmt.Fprint(stdout, o.stdout)
+	return o.code
+}
+
 func main() {
 	os.Exit(run(os.Args[1:], os.Stdout, os.Stderr))
 }
@@ -399,19 +454,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "pkgwhen: %s: %v\n", a.spec, err)
 			return exitRegistry
 		}
-		if kind != lookupFound {
-			fmt.Fprintf(stderr, "pkgwhen: %s\n", notFound(a.spec, kind, others, now, token != ""))
-			if kind == lookupNoPackage {
-				return exitNoPackage
-			}
-			return exitNoVersion
-		}
-		if a.asJSON {
-			fmt.Fprint(stdout, release.JSON(a.spec.Registry, a.spec.Name, []release.Release{r}, 0, now))
-		} else {
-			fmt.Fprint(stdout, release.Line(r, now))
-		}
-		return exitOK
+		return emit(oneOutcome(a, r, kind, others, now, token != ""), stdout, stderr)
 	}
 
 	rs, found, err := list(a.spec, token)
@@ -419,26 +462,5 @@ func run(argv []string, stdout, stderr io.Writer) int {
 		fmt.Fprintf(stderr, "pkgwhen: %s: %v\n", a.spec, err)
 		return exitRegistry
 	}
-	if !found {
-		fmt.Fprintf(stderr, "pkgwhen: %s\n", notFound(a.spec, lookupNoPackage, nil, now, token != ""))
-		return exitNoPackage
-	}
-	kept := release.Filter(rs, now, a.window)
-	release.Sort(kept)
-	kept, more := release.Limit(kept, a.limit)
-	// The trailer is a field in the JSON document, so only the table needs
-	// it said in words.
-	cut := more
-	if a.asJSON {
-		cut = 0
-	}
-	for _, n := range notes(a.spec.Registry, rs, cut, now, a.window) {
-		fmt.Fprintf(stderr, "pkgwhen: %s\n", n)
-	}
-	if a.asJSON {
-		fmt.Fprint(stdout, release.JSON(a.spec.Registry, a.spec.Name, kept, more, now))
-		return exitOK
-	}
-	fmt.Fprint(stdout, release.Table(kept, now))
-	return exitOK
+	return emit(listOutcome(a, rs, found, now, token != ""), stdout, stderr)
 }

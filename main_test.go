@@ -269,3 +269,89 @@ func TestHelpMatchesInstructions(t *testing.T) {
 		}
 	}
 }
+
+func TestOneOutcome(t *testing.T) {
+	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
+	s := spec.Spec{Registry: "pypi", Name: "foo", Version: "1.2.3"}
+	r := release.Release{Version: "1.2.3", Published: now.Add(-3 * time.Hour)}
+	others := []release.Release{{Version: "1.2.0", Published: now.Add(-48 * time.Hour)}}
+	tests := []struct {
+		name string
+		json bool
+		kind lookup
+		want outcome
+	}{
+		{"found, as a line", false, lookupFound, outcome{stdout: release.Line(r, now)}},
+		{"found, as JSON", true, lookupFound, outcome{stdout: release.JSON("pypi", "foo", []release.Release{r}, 0, now)}},
+		{"no such version", false, lookupNoVersion, outcome{stderr: []string{notFound(s, lookupNoVersion, others, now, false)}, code: exitNoVersion}},
+		{"no such version, as JSON", true, lookupNoVersion, outcome{stderr: []string{notFound(s, lookupNoVersion, others, now, false)}, code: exitNoVersion}},
+		{"no such package", false, lookupNoPackage, outcome{stderr: []string{notFound(s, lookupNoPackage, others, now, false)}, code: exitNoPackage}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := cliArgs{spec: s, asJSON: tt.json}
+			if got := oneOutcome(a, r, tt.kind, others, now, false); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("oneOutcome = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestListOutcome(t *testing.T) {
+	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
+	day := 24 * time.Hour
+	s := spec.Spec{Registry: "npm", Name: "foo"}
+	v1 := release.Release{Version: "1.0.0", Published: now.Add(-30 * day)}
+	v2 := release.Release{Version: "2.0.0", Published: now.Add(-10 * day)}
+	v3 := release.Release{Version: "3.0.0", Published: now.Add(-2 * time.Hour)}
+	// Out of publication order, as GitHub can return them.
+	rs := []release.Release{v2, v3, v1}
+	weekOld := release.Window{MinAge: 7 * day, MinAgeSet: true, MinAgeText: "7d"}
+	yearOld := release.Window{MinAge: 365 * day, MinAgeSet: true, MinAgeText: "365d"}
+	tests := []struct {
+		name  string
+		limit int
+		json  bool
+		w     release.Window
+		rs    []release.Release
+		found bool
+		want  outcome
+	}{
+		{"no such package", 20, false, release.Window{}, nil, false,
+			outcome{stderr: []string{notFound(s, lookupNoPackage, nil, now, false)}, code: exitNoPackage}},
+		{"every version, newest first", 20, false, release.Window{}, rs, true,
+			outcome{stdout: release.Table([]release.Release{v3, v2, v1}, now)}},
+		{"a cut table says how much was cut", 1, false, release.Window{}, rs, true,
+			outcome{stdout: release.Table([]release.Release{v3}, now), stderr: []string{release.More(2)}}},
+		{"a cut document carries the count instead", 1, true, release.Window{}, rs, true,
+			outcome{stdout: release.JSON("npm", "foo", []release.Release{v3}, 2, now)}},
+		{"the window narrows before the count is cut", 1, true, weekOld, rs, true,
+			outcome{stdout: release.JSON("npm", "foo", []release.Release{v2}, 1, now)}},
+		{"a window that dropped everything says why", 20, false, yearOld, rs, true,
+			outcome{stdout: release.Table(nil, now), stderr: notes("npm", rs, 0, now, yearOld)}},
+		{"an empty list says why, as JSON too", 20, true, release.Window{}, nil, true,
+			outcome{stdout: release.JSON("npm", "foo", nil, 0, now), stderr: []string{release.NoVersions("npm")}}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := cliArgs{spec: s, limit: tt.limit, asJSON: tt.json, window: tt.w}
+			if got := listOutcome(a, tt.rs, tt.found, now, false); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("listOutcome = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEmit(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := emit(outcome{stdout: "1.0.0  2026-09-08  2h\n", stderr: []string{"first", "second"}, code: exitNoVersion}, &stdout, &stderr)
+	if code != exitNoVersion {
+		t.Errorf("exit = %d, want %d", code, exitNoVersion)
+	}
+	if got, want := stdout.String(), "1.0.0  2026-09-08  2h\n"; got != want {
+		t.Errorf("stdout = %q, want %q", got, want)
+	}
+	if got, want := stderr.String(), "pkgwhen: first\npkgwhen: second\n"; got != want {
+		t.Errorf("stderr = %q, want %q", got, want)
+	}
+}
