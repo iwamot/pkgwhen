@@ -26,11 +26,20 @@ func Token() string {
 	return strings.TrimSpace(string(out))
 }
 
-// List fetches releases of repo, newest created first as GitHub orders them,
-// following pages until at least want releases are in hand or the pages run
-// out. want <= 0 reads every page. found is false when the repository does
-// not exist, or is private and the token cannot see it.
-func List(repo, token string, want int) (rs []release.Release, found bool, err error) {
+// List fetches every release of repo, reading page after page to the last.
+// found is false when the repository does not exist, or is private and the
+// token cannot see it.
+func List(repo, token string) (rs []release.Release, found bool, err error) {
+	return list(repo, token, true)
+}
+
+// FirstPage fetches the first page of releases of repo, the newest created,
+// as GitHub orders them. found is as for List.
+func FirstPage(repo, token string) (rs []release.Release, found bool, err error) {
+	return list(repo, token, false)
+}
+
+func list(repo, token string, allPages bool) (rs []release.Release, found bool, err error) {
 	url := ListURL(repo)
 	for url != "" {
 		resp, err := fetch.Get(url, Headers(token))
@@ -49,7 +58,7 @@ func List(repo, token string, want int) (rs []release.Release, found bool, err e
 			return nil, false, err
 		}
 		rs = append(rs, page...)
-		if want > 0 && len(rs) >= want {
+		if !allPages {
 			break
 		}
 		url = resp.Next
