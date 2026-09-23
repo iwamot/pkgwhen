@@ -173,6 +173,19 @@ func TestLatest(t *testing.T) {
 	}
 }
 
+func TestFind(t *testing.T) {
+	rs := []Release{{Version: "1.0.0"}, {Version: "v1.1.0"}}
+	if got, ok := Find(rs, "v1.1.0"); !ok || got.Version != "v1.1.0" {
+		t.Errorf("Find(v1.1.0) = %+v, %v", got, ok)
+	}
+	if _, ok := Find(rs, "1.1.0"); ok {
+		t.Error("Find(1.1.0) matched a differently spelled version")
+	}
+	if _, ok := Find(nil, "1.0.0"); ok {
+		t.Error("Find on an empty list reported a release")
+	}
+}
+
 func TestDescribe(t *testing.T) {
 	tests := []struct {
 		r    Release

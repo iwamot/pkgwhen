@@ -162,6 +162,17 @@ func Age(now, t time.Time) string {
 	}
 }
 
+// Find is the release whose version is v, spelled exactly as the registry
+// spells it. ok is false when there is none.
+func Find(rs []Release, v string) (r Release, ok bool) {
+	for _, c := range rs {
+		if c.Version == v {
+			return c, true
+		}
+	}
+	return Release{}, false
+}
+
 // Latest is the release published most recently. ok is false for an empty
 // list, which is what a package with no usable versions comes back as.
 func Latest(rs []Release) (r Release, ok bool) {
