@@ -253,15 +253,18 @@ func missing(packageExists bool) lookup {
 }
 
 // list fetches every version the registry knows for s. found is false when
-// the package itself does not exist.
-func list(s spec.Spec, want int, token string) ([]release.Release, bool, error) {
+// the package itself does not exist. GitHub is read to the last page even
+// when fewer releases will be shown: it orders releases by creation, not
+// publication, so a later page can hold the newest one, and the count of
+// the rest is only right when all of them are in hand.
+func list(s spec.Spec, token string) ([]release.Release, bool, error) {
 	switch s.Registry {
 	case "pypi":
 		return pypi.List(s.Name)
 	case "npm":
 		return npm.List(s.Name)
 	default:
-		return github.List(s.Name, token, want)
+		return github.List(s.Name, token)
 	}
 }
 
@@ -302,8 +305,12 @@ func one(s spec.Spec, token string) (r release.Release, kind lookup, others []re
 			return r, lookupFound, nil, err
 		}
 		// The first page answers both questions: whether the repository is
-		// visible at all, and which release is the newest.
-		rs, exists, err := github.List(s.Name, token, 1)
+		// visible at all, and which release is the newest. Only the first,
+		// because a caller waiting for a release lands here on every try,
+		// and reading every page each time would spend the 60 requests an
+		// hour allowed without a token within minutes; a release published
+		// late from an old draft can sit on a later page and go unnamed.
+		rs, exists, err := github.FirstPage(s.Name, token)
 		if err != nil {
 			return release.Release{}, lookupFound, nil, err
 		}
@@ -407,13 +414,7 @@ func run(argv []string, stdout, stderr io.Writer) int {
 		return exitOK
 	}
 
-	// A window can drop any number of the newest releases, so GitHub, the
-	// one registry read page by page, is read to the end when one is set.
-	want := a.limit
-	if a.window.MinAgeSet || a.window.SinceSet {
-		want = 0
-	}
-	rs, found, err := list(a.spec, want, token)
+	rs, found, err := list(a.spec, token)
 	if err != nil {
 		fmt.Fprintf(stderr, "pkgwhen: %s: %v\n", a.spec, err)
 		return exitRegistry
