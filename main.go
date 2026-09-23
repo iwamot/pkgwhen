@@ -54,7 +54,7 @@ with the time of day, and the options that narrow a list are refused
 rather than ignored.
 
 Options:
-  --min-age DUR   only versions published more than DUR ago (1d, 36h, 2w)
+  --min-age DUR   only versions published at least DUR ago (1d, 36h, 2w)
   --since DUR     only versions published within the last DUR
                   (--min-age keeps the older side, --since the newer side)
   -n N            print at most N versions (default 20)

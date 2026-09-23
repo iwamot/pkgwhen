@@ -51,7 +51,7 @@ That paragraph is all the agent needs. `pkgwhen --instructions` prints the same 
 
 ## What the agent sees
 
-Checking whether a version has passed a one-day release age. Only versions published more than a day ago are listed, so the newest one being absent is the answer:
+Checking whether a version has passed a one-day release age. Only versions published at least a day ago are listed, so the newest one being absent is the answer:
 
 ```
 $ pkgwhen --min-age 1d -n 3 npm:@types/node
@@ -144,7 +144,7 @@ with the time of day, and the options that narrow a list are refused
 rather than ignored.
 
 Options:
-  --min-age DUR   only versions published more than DUR ago (1d, 36h, 2w)
+  --min-age DUR   only versions published at least DUR ago (1d, 36h, 2w)
   --since DUR     only versions published within the last DUR
                   (--min-age keeps the older side, --since the newer side)
   -n N            print at most N versions (default 20)
@@ -172,14 +172,33 @@ Exit codes:
 ```
 
 - Versions are ordered by publish date, not by version number, so a patch to an older line appears where it was published. To compare two versions, ask for each with `@VERSION`.
-- Ages are measured from the current UTC time. The table shows whole days, hours below a day, minutes below an hour, and seconds below a minute; `--min-age` and `--since` are compared to the second.
+- Ages are measured from the current UTC time. The table shows whole days, hours below a day, minutes below an hour, and seconds below a minute; `--min-age` and `--since` compare the full publish time the registry gives, which can be finer than the second that is printed.
 - npm: the full packument is fetched, because only it carries publish dates. For a large package that is a few megabytes, compressed in transit.
 - PyPI: a version's date is the earliest upload among its files, which is the moment uv's `exclude-newer` treats it as available. A version is marked `yanked` when any of its files is, which is how Renovate reads it. Versions with no files are left out.
 - GitHub: the date is `published_at`, which is what Renovate uses and which can trail the draft's creation by as long as the draft took to finish. Draft releases are dropped. `GITHUB_TOKEN`, `GH_TOKEN`, or `gh auth token` is used when available; without one, the API allows 60 requests an hour. Either that limit or the short-term one is reported as a rate limit with how long to wait, rather than as a bare 403. A list reads every page, 100 releases each, because GitHub orders releases by creation and a later page can hold the newest publication. When `@VERSION` is not found, only the first page is read to name the latest release, so a release published late from an old draft can go unnamed there.
 - An empty answer says which kind it is, on stderr, and still exits 0. A window that dropped everything names the nearest version it dropped; a package the registry has but with nothing to list — a GitHub repository that tags without releasing, say — says that instead. A version the registry does not have exits 1 and names the latest one that does exist; a package or repository it does not have exits 4, because the next step differs: wait, or check the name.
 - A registry answer that is neither the document nor a 404 exits 3 and carries the next step: a rate limit says how long to wait, a 5xx says the registry is failing and to retry later, and any other status says the registry is refusing this request, where a second try is the most that helps.
 - Nothing is cached and nothing is written. Every call asks the registry.
-- While the version is 0.x, the exit codes and the shape of the output can still change between releases; from 1.0 they only gain cases.
+
+## Compatibility
+
+From 1.0, a script can rely on the following within a major version. The wording on stderr is not part of it: read the exit code and the JSON. Until 1.0, any of it can still change between releases.
+
+| What | Promise |
+|---|---|
+| Exit codes | 0 to 4 keep their meanings, and a situation that exits with one code keeps exiting with it. |
+| stdout | The table, the one line, or the JSON document on exit 0, and nothing on any other exit code. No sentences. |
+| stderr | `pkgwhen:` lines: on exit 0, why a table is empty or cut short; otherwise, why the call failed and what to do next. The wording can change. |
+| JSON | `registry`, `name`, `versions`, and `more`, and in each version `version`, `published`, `age_seconds`, `yanked`, `deprecated`, and `prerelease`, keep their names, types, and meanings. `versions` is an array even when empty. Fields can be added, so skip the ones you do not know. |
+| Times | `published` is RFC 3339 in UTC, to the whole second. `age_seconds` is a whole number of seconds, never negative. |
+| Order | Newest publish time first; versions published at the same instant by version string, descending. Never by version number. |
+| `more` | How many versions the count cut, among those the date options kept; 0 when nothing was cut. |
+| Date options | `--min-age` keeps versions published at least DUR ago, and `--since` those published within the last DUR. Both edges are inclusive. |
+| Table | A header line, then one row per version: version, publish date, age, and marks. The width of the spacing is not fixed. |
+| One line | Version, publish time in RFC 3339, age, and marks, separated by spaces. |
+| Arguments | A combination refused today stays refused: the options that narrow a list next to `@VERSION`, `-n` with `--all`, and date options that cannot both match. |
+| Side effects | None: nothing is cached or written. A GitHub token is taken from `GITHUB_TOKEN`, then `GH_TOKEN`, then `gh auth token`. |
+| Platforms | Prebuilt for Linux, macOS, and Windows on amd64 and arm64. `go install` works on the oldest Go release still supported upstream. |
 
 ## Out of scope
 
