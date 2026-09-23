@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -32,9 +33,12 @@ func ListURL(repo string) string {
 	return fmt.Sprintf("https://api.github.com/repos/%s/releases?per_page=%d", repo, PerPage)
 }
 
-// TagURL is the endpoint for the release attached to one tag.
+// TagURL is the endpoint for the release attached to one tag. The tag is
+// escaped as one path segment: a "#" would otherwise end the path and ask
+// for a shorter tag that may exist, and a "%" would be decoded into another
+// name. GitHub resolves a "/" in the tag escaped or not.
 func TagURL(repo, tag string) string {
-	return fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", repo, tag)
+	return fmt.Sprintf("https://api.github.com/repos/%s/releases/tags/%s", repo, url.PathEscape(tag))
 }
 
 // AlternateTag is the other spelling of a version: with a leading "v" when

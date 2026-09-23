@@ -13,8 +13,16 @@ func TestURLs(t *testing.T) {
 	if got := ListURL("jdx/aube"); got != "https://api.github.com/repos/jdx/aube/releases?per_page=100" {
 		t.Errorf("ListURL = %q", got)
 	}
-	if got := TagURL("jdx/aube", "v2.2.12"); got != "https://api.github.com/repos/jdx/aube/releases/tags/v2.2.12" {
-		t.Errorf("TagURL = %q", got)
+	tags := []struct{ tag, want string }{
+		{"v2.2.12", "https://api.github.com/repos/jdx/aube/releases/tags/v2.2.12"},
+		{"v2.2.12#x", "https://api.github.com/repos/jdx/aube/releases/tags/v2.2.12%23x"},
+		{"v2.2.12%20", "https://api.github.com/repos/jdx/aube/releases/tags/v2.2.12%2520"},
+		{"release/1.0", "https://api.github.com/repos/jdx/aube/releases/tags/release%2F1.0"},
+	}
+	for _, tt := range tags {
+		if got := TagURL("jdx/aube", tt.tag); got != tt.want {
+			t.Errorf("TagURL(%q) = %q, want %q", tt.tag, got, tt.want)
+		}
 	}
 }
 
