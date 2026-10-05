@@ -46,6 +46,7 @@ func TestParseArgs(t *testing.T) {
 		{"min-age with a version", []string{"--min-age", "1d", "pypi:a@1.2.3"}, cliArgs{}, "--min-age does not apply with @VERSION; drop the flag or the @VERSION"},
 		{"limit with a version", []string{"-n", "5", "pypi:a@1.2.3"}, cliArgs{}, "-n does not apply with @VERSION"},
 		{"all with a version", []string{"--all", "pypi:a@1.2.3"}, cliArgs{}, "--all does not apply with @VERSION"},
+		{"unmarked with a version", []string{"--unmarked", "pypi:a@1.2.3"}, cliArgs{}, "--unmarked does not apply with @VERSION"},
 		{"several dead options with a version", []string{"--all", "--since", "30d", "pypi:a@1.2.3"}, cliArgs{}, "--since and --all do not apply with @VERSION; drop them or the @VERSION"},
 		{"dead options are refused before the window is compared", []string{"--min-age", "7d", "--since", "1d", "pypi:a@1.2.3"}, cliArgs{}, "--min-age and --since do not apply with @VERSION"},
 		{"json still applies with a version", []string{"--json", "pypi:a@1.2.3"}, with(func(a *cliArgs) {
@@ -68,6 +69,7 @@ func TestParseArgs(t *testing.T) {
 			a.limit = 0
 		}), ""},
 		{"json", []string{"--json", "pypi:openai-agents"}, with(func(a *cliArgs) { a.spec = pypi; a.asJSON = true }), ""},
+		{"unmarked", []string{"--unmarked", "pypi:openai-agents"}, with(func(a *cliArgs) { a.spec = pypi; a.unmarked = true }), ""},
 		{"help short", []string{"-h"}, with(func(a *cliArgs) { a.showHelp = true }), ""},
 		{"help long", []string{"--help"}, with(func(a *cliArgs) { a.showHelp = true }), ""},
 		{"version short", []string{"-v"}, with(func(a *cliArgs) { a.showVersion = true }), ""},
@@ -337,6 +339,43 @@ func TestListOutcome(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			a := cliArgs{spec: s, limit: tt.limit, asJSON: tt.json, window: tt.w}
 			if got := listOutcome(a, tt.rs, tt.found, now, false); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("listOutcome = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestListOutcomeUnmarked(t *testing.T) {
+	now := time.Date(2026, 9, 8, 12, 0, 0, 0, time.UTC)
+	s := spec.Spec{Registry: "npm", Name: "foo"}
+	stable := release.Release{Version: "1.0.0", Published: now.Add(-72 * time.Hour)}
+	pre := release.Release{Version: "2.0.0-rc1", Published: now.Add(-48 * time.Hour), Prerelease: true}
+	yanked := release.Release{Version: "1.1.0", Published: now.Add(-24 * time.Hour), Yanked: true}
+	deprecated := release.Release{Version: "1.2.0", Published: now.Add(-12 * time.Hour), Deprecated: true}
+	rs := []release.Release{stable, pre, yanked, deprecated}
+	recent := release.Window{Since: 36 * time.Hour, SinceSet: true, SinceText: "36h"}
+	lastHours := release.Window{Since: 6 * time.Hour, SinceSet: true, SinceText: "6h"}
+	tests := []struct {
+		name  string
+		limit int
+		json  bool
+		w     release.Window
+		rs    []release.Release
+		want  outcome
+	}{
+		{"marked versions are dropped before the count is cut", 1, false, release.Window{}, rs,
+			outcome{stdout: release.Table([]release.Release{stable}, now)}},
+		{"the document counts only unmarked versions", 1, true, release.Window{}, rs,
+			outcome{stdout: release.JSON("npm", "foo", []release.Release{stable}, 0, now)}},
+		{"a window left only marked versions", 20, false, recent, rs,
+			outcome{stdout: release.Table(nil, now), stderr: []string{release.UnmarkedNote([]release.Release{yanked, deprecated}, now)}}},
+		{"a window that dropped everything says why on its own", 20, false, lastHours, rs,
+			outcome{stdout: release.Table(nil, now), stderr: notes("npm", rs, 0, now, lastHours)}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := cliArgs{spec: s, limit: tt.limit, asJSON: tt.json, window: tt.w, unmarked: true}
+			if got := listOutcome(a, tt.rs, true, now, false); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("listOutcome = %#v, want %#v", got, tt.want)
 			}
 		})

@@ -64,6 +64,8 @@ VERSION  PUBLISHED   AGE
 
 Only the table goes to stdout. Anything the answer needs a sentence for — a cut list, a window that dropped everything — is a `pkgwhen:` line on stderr, so `awk` over stdout reads rows and nothing else.
 
+Use `--unmarked` when prereleases or other marked versions push the newest unmarked version beyond the first 20 rows. It removes `pre`, `yanked`, and `deprecated` versions before applying `-n`; it can be combined with either date option. This is a filter on pkgwhen's marks, not a prediction of what Renovate or another updater will choose. If every version in the requested date window is marked, the table is empty and stderr names the newest marked one.
+
 A window that leaves nothing says why on stderr, and names the nearest version it dropped, so an empty table is never silent:
 
 ```
@@ -147,9 +149,11 @@ Options:
   --min-age DUR   only versions published at least DUR ago (1d, 36h, 2w)
   --since DUR     only versions published within the last DUR
                   (--min-age keeps the older side, --since the newer side)
+  --unmarked      omit versions marked yanked, deprecated, or pre
   -n N            print at most N versions (default 20)
   --all           print every version
-  --json          print JSON instead of the table, with ISO 8601 timestamps
+  --json          print JSON: an object with a versions array and ISO 8601 timestamps
+                  see README Compatibility for the field contract
   -h, --help      show this help
   -v, --version   show the version
   --instructions  print the paragraph for the agent's instruction file
@@ -192,11 +196,12 @@ From 1.0, a script can rely on the following within a major version. The wording
 | JSON | `registry`, `name`, `versions`, and `more`, and in each version `version`, `published`, `age_seconds`, `yanked`, `deprecated`, and `prerelease`, keep their names, types, and meanings. `versions` is an array even when empty. Fields can be added, so skip the ones you do not know. |
 | Times | `published` is RFC 3339 in UTC, to the whole second. `age_seconds` is a whole number of seconds, never negative. |
 | Order | Newest publish time first; versions published at the same instant by version string, descending. Never by version number. |
-| `more` | How many versions the count cut, among those the date options kept; 0 when nothing was cut. |
+| `more` | How many versions the count cut, after date and `--unmarked` filters; 0 when nothing was cut. |
 | Date options | `--min-age` keeps versions published at least DUR ago, and `--since` those published within the last DUR. Both edges are inclusive. |
+| `--unmarked` | Removes versions marked `pre`, `yanked`, or `deprecated` before applying the count limit. It can be combined with date options. |
 | Table | A header line, then one row per version: version, publish date, age, and marks. The width of the spacing is not fixed. |
 | One line | Version, publish time in RFC 3339, age, and marks, separated by spaces. |
-| Arguments | A combination refused today stays refused: the options that narrow a list next to `@VERSION`, `-n` with `--all`, and date options that cannot both match. |
+| Arguments | A combination refused today stays refused: date options, `--unmarked`, `-n`, or `--all` next to `@VERSION`; `-n` with `--all`; and date options that cannot both match. |
 | Side effects | None: nothing is cached or written. A GitHub token is taken from `GITHUB_TOKEN`, then `GH_TOKEN`, then `gh auth token`. |
 | Platforms | Prebuilt for Linux, macOS, and Windows on amd64 and arm64. `go install` works on the oldest Go release still supported upstream. |
 
