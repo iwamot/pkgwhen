@@ -72,6 +72,38 @@ func Filter(rs []Release, now time.Time, w Window) []Release {
 	return out
 }
 
+// Unmarked keeps versions without registry marks. It does not model any
+// particular dependency updater's rules, which can depend on the current pin.
+func Unmarked(rs []Release) []Release {
+	var out []Release
+	for _, r := range rs {
+		if len(r.Marks()) == 0 {
+			out = append(out, r)
+		}
+	}
+	return out
+}
+
+// UnmarkedNote explains an empty result to a caller who passed --unmarked
+// when every version the window kept is marked, naming the newest of them
+// with its marks. It returns "" when an unmarked version remains or nothing
+// was kept, since the window's own note covers that case.
+func UnmarkedNote(rs []Release, now time.Time) string {
+	var newest *Release
+	for i, r := range rs {
+		if len(r.Marks()) == 0 {
+			return ""
+		}
+		if newest == nil || r.Published.After(newest.Published) {
+			newest = &rs[i]
+		}
+	}
+	if newest == nil {
+		return ""
+	}
+	return fmt.Sprintf("every version left is marked; newest is %s; drop --unmarked to see them", Describe(*newest, now))
+}
+
 // Note explains an empty result to a caller who narrowed the list with a
 // window: which edge emptied it, and the nearest version that edge dropped.
 // It returns "" when versions remain or when no window was set, so a caller

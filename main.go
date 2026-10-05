@@ -57,9 +57,11 @@ Options:
   --min-age DUR   only versions published at least DUR ago (1d, 36h, 2w)
   --since DUR     only versions published within the last DUR
                   (--min-age keeps the older side, --since the newer side)
+  --unmarked      omit versions marked yanked, deprecated, or pre
   -n N            print at most N versions (default 20)
   --all           print every version
-  --json          print JSON instead of the table, with ISO 8601 timestamps
+  --json          print JSON: an object with a versions array and ISO 8601 timestamps
+                  see README Compatibility for the field contract
   -h, --help      show this help
   -v, --version   show the version
   --instructions  print the paragraph for the agent's instruction file
@@ -95,6 +97,7 @@ type cliArgs struct {
 	window           release.Window
 	limit            int
 	asJSON           bool
+	unmarked         bool
 	spec             spec.Spec
 }
 
@@ -127,6 +130,8 @@ func parseArgs(argv []string) (cliArgs, error) {
 			allGiven = true
 		case "--json":
 			a.asJSON = true
+		case "--unmarked":
+			a.unmarked = true
 		case "--min-age", "--since", "-n":
 			if i+1 >= len(argv) {
 				return cliArgs{}, fmt.Errorf("%s needs a value", arg)
@@ -183,6 +188,9 @@ func parseArgs(argv []string) (cliArgs, error) {
 		}
 		if a.window.SinceSet {
 			dead = append(dead, "--since")
+		}
+		if a.unmarked {
+			dead = append(dead, "--unmarked")
 		}
 		if limitGiven {
 			dead = append(dead, "-n")
@@ -395,17 +403,27 @@ func listOutcome(a cliArgs, rs []release.Release, found bool, now time.Time, hav
 		return outcome{stderr: []string{notFound(a.spec, lookupNoPackage, nil, now, haveToken)}, code: exitNoPackage}
 	}
 	kept := release.Filter(rs, now, a.window)
+	outputNotes := notes(a.spec.Registry, rs, 0, now, a.window)
+	if a.unmarked {
+		if note := release.UnmarkedNote(kept, now); note != "" {
+			outputNotes = append(outputNotes, note)
+		}
+		kept = release.Unmarked(kept)
+	}
 	release.Sort(kept)
 	kept, more := release.Limit(kept, a.limit)
 	if a.asJSON {
 		return outcome{
 			stdout: release.JSON(a.spec.Registry, a.spec.Name, kept, more, now),
-			stderr: notes(a.spec.Registry, rs, 0, now, a.window),
+			stderr: outputNotes,
 		}
+	}
+	if more > 0 {
+		outputNotes = append(outputNotes, release.More(more))
 	}
 	return outcome{
 		stdout: release.Table(kept, now),
-		stderr: notes(a.spec.Registry, rs, more, now, a.window),
+		stderr: outputNotes,
 	}
 }
 

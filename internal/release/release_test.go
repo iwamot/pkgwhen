@@ -122,6 +122,50 @@ func TestAge(t *testing.T) {
 	}
 }
 
+func TestUnmarked(t *testing.T) {
+	stable := Release{Version: "1.0.0", Published: at(time.Hour)}
+	tests := []struct {
+		name string
+		rs   []Release
+		want []Release
+	}{
+		{"unmarked versions stay", []Release{stable}, []Release{stable}},
+		{"a prerelease goes", []Release{stable, {Version: "2.0.0-rc1", Prerelease: true}}, []Release{stable}},
+		{"a yanked version goes", []Release{{Version: "0.9.0", Yanked: true}, stable}, []Release{stable}},
+		{"a deprecated version goes", []Release{{Version: "0.8.0", Deprecated: true}}, nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := Unmarked(tt.rs); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("Unmarked = %#v, want %#v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestUnmarkedNote(t *testing.T) {
+	day := 24 * time.Hour
+	stable := Release{Version: "1.0.0", Published: at(10 * day)}
+	rc := Release{Version: "2.0.0-rc1", Published: at(2 * day), Prerelease: true}
+	yanked := Release{Version: "1.1.0", Published: at(5 * day), Yanked: true}
+	tests := []struct {
+		name string
+		rs   []Release
+		want string
+	}{
+		{"nothing kept", nil, ""},
+		{"an unmarked version remains", []Release{rc, stable}, ""},
+		{"every version is marked", []Release{yanked, rc}, "every version left is marked; newest is 2.0.0-rc1 (pre), published 2d ago; drop --unmarked to see them"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := UnmarkedNote(tt.rs, now); got != tt.want {
+				t.Errorf("UnmarkedNote = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestNote(t *testing.T) {
 	day := 24 * time.Hour
 	old := Release{Version: "0.21.0", Published: at(45 * day)}
