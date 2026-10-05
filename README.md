@@ -44,7 +44,7 @@ Or download a prebuilt binary from the [Releases page](https://github.com/iwamot
 Then tell the agent to use it, in `CLAUDE.md`, `AGENTS.md`, or whichever file your agent reads:
 
 ```markdown
-To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version on its own; it cannot be combined with the options that narrow a list. To narrow a list, use `--min-age 1d` for versions old enough to pass a one-day release age, or `--since 30d` for versions published in the last 30 days. A mark means dependency updaters usually skip that version, so a newer marked version is not a reason to expect a PR. Exit 1 means the version does not exist (yet); rerun while it exits 1, and stop and read stderr on any other exit code. On exit 0, stderr says why a table is empty or cut short.
+To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version on its own; it cannot be combined with the options that narrow a list. To narrow a list, use `--min-age 1d` for versions old enough to pass a one-day release age, or `--since 30d` for versions published in the last 30 days. A mark means dependency updaters usually skip that version, so a newer marked version is not a reason to expect a PR. Exit 1 means the version does not exist (yet), so rerun while it exits 1; when waiting for the first release of a new package whose name you have checked, rerun on exit 4 too; on any other exit code, stop and read stderr. On exit 0, stderr says why a table is empty or cut short.
 ```
 
 That paragraph is all the agent needs. `pkgwhen --instructions` prints the same paragraph, for setup scripts and machines where this page is not at hand.
@@ -94,6 +94,8 @@ The first release of a brand-new package is the one wait that needs both codes, 
 ```
 $ until pkgwhen npm:welt-io-x@1.0.0; do rc=$?; [ $rc -eq 1 ] || [ $rc -eq 4 ] || break; sleep 30; done
 ```
+
+Each request to a registry times out after 60 seconds. That limit is per request, not on the whole command or on a wait loop, so a script that needs an upper bound on how long it waits sets one itself, for example with `timeout`.
 
 A repository that tags without publishing releases. The table is empty and the exit code is 0, because the name was found and the answer is simply that there is nothing to list:
 
