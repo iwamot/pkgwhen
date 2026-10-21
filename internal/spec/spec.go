@@ -49,7 +49,7 @@ func Parse(arg string) (Spec, error) {
 		}
 	}
 	if s.Name == "" {
-		return Spec{}, fmt.Errorf("%q: no package name after %s:", arg, registry)
+		return Spec{}, fmt.Errorf("%q: no package name after the %s: prefix", arg, registry)
 	}
 	if registry == "github-releases" {
 		owner, repo, ok := strings.Cut(s.Name, "/")
