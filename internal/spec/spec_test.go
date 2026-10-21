@@ -16,8 +16,8 @@ func TestParse(t *testing.T) {
 		{"npm:fastq@1.20.3", Spec{"npm", "fastq", "1.20.3"}, ""},
 		{"npm:@types/node", Spec{"npm", "@types/node", ""}, ""},
 		{"npm:@types/node@22.0.0", Spec{"npm", "@types/node", "22.0.0"}, ""},
-		{"github-releases:jdx/aube", Spec{"github-releases", "jdx/aube", ""}, ""},
-		{"github-releases:jdx/aube@v2.2.12", Spec{"github-releases", "jdx/aube", "v2.2.12"}, ""},
+		{"github-releases:aubepkg/aube", Spec{"github-releases", "aubepkg/aube", ""}, ""},
+		{"github-releases:aubepkg/aube@v2.2.12", Spec{"github-releases", "aubepkg/aube", "v2.2.12"}, ""},
 		{"openai-agents", Spec{}, "want REGISTRY:NAME"},
 		{":openai-agents", Spec{}, "want REGISTRY:NAME"},
 		{"cargo:serde", Spec{}, `unknown registry "cargo"`},
@@ -26,7 +26,7 @@ func TestParse(t *testing.T) {
 		{"github-releases:aube", Spec{}, "wants OWNER/REPO"},
 		{"github-releases:/aube", Spec{}, "wants OWNER/REPO"},
 		{"github-releases:jdx/", Spec{}, "wants OWNER/REPO"},
-		{"github-releases:jdx/aube/extra", Spec{}, "wants OWNER/REPO"},
+		{"github-releases:aubepkg/aube/extra", Spec{}, "wants OWNER/REPO"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.arg, func(t *testing.T) {

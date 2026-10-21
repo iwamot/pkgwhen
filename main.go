@@ -44,7 +44,7 @@ Usage:
 Examples:
   pkgwhen pypi:openai-agents
   pkgwhen npm:@types/node@22.0.0
-  pkgwhen github-releases:jdx/aube --since 30d
+  pkgwhen github-releases:aubepkg/aube --since 30d
 
 REGISTRY is pypi, npm, or github-releases. NAME is the package name, or
 OWNER/REPO for GitHub. Versions are printed newest first by publish date,
