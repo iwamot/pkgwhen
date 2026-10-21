@@ -77,7 +77,7 @@ VERSION  PUBLISHED  AGE
 One version, with the time of day. The tag on GitHub is `v2.2.12`, and the plain version finds it too:
 
 ```
-$ pkgwhen github-releases:jdx/aube@2.2.12
+$ pkgwhen github-releases:aubepkg/aube@2.2.12
 v2.2.12  2026-09-06T00:44:39Z  13h
 ```
 
@@ -138,7 +138,7 @@ Usage:
 Examples:
   pkgwhen pypi:openai-agents
   pkgwhen npm:@types/node@22.0.0
-  pkgwhen github-releases:jdx/aube --since 30d
+  pkgwhen github-releases:aubepkg/aube --since 30d
 
 REGISTRY is pypi, npm, or github-releases. NAME is the package name, or
 OWNER/REPO for GitHub. Versions are printed newest first by publish date,
