@@ -148,6 +148,32 @@ func TestMissing(t *testing.T) {
 	}
 }
 
+func TestFromList(t *testing.T) {
+	listed := []release.Release{{Version: "1.1.0"}, {Version: "1.0.0"}}
+	cases := []struct {
+		name    string
+		rs      []release.Release
+		exists  bool
+		version string
+		found   string
+		kind    lookup
+		others  int
+	}{
+		{"listed though its own lookup missed", listed, true, "1.1.0", "1.1.0", lookupFound, 0},
+		{"not listed", listed, true, "2.0.0", "", lookupNoVersion, 2},
+		{"no such package", nil, false, "1.1.0", "", lookupNoPackage, 0},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			r, kind, others := fromList(c.rs, c.exists, c.version)
+			if r.Version != c.found || kind != c.kind || len(others) != c.others {
+				t.Errorf("fromList = %q, %v, %d others; want %q, %v, %d others",
+					r.Version, kind, len(others), c.found, c.kind, c.others)
+			}
+		})
+	}
+}
+
 func TestDeadOptionsError(t *testing.T) {
 	tests := []struct {
 		names []string
