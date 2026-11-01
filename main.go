@@ -262,6 +262,17 @@ func missing(packageExists bool) lookup {
 	return lookupNoPackage
 }
 
+// fromList answers for a version its own lookup did not find, from the list
+// read next. A version just published can already be listed while its own
+// lookup still answers 404, and calling it missing would name that same
+// version as the newest one that exists.
+func fromList(rs []release.Release, packageExists bool, v string) (release.Release, lookup, []release.Release) {
+	if r, ok := release.Find(rs, v); ok {
+		return r, lookupFound, nil
+	}
+	return release.Release{}, missing(packageExists), rs
+}
+
 // list fetches every version the registry knows for s. found is false when
 // the package itself does not exist. GitHub is read to the last page even
 // when fewer releases will be shown: it orders releases by creation, not
@@ -294,7 +305,8 @@ func one(s spec.Spec, token string) (r release.Release, kind lookup, others []re
 		if err != nil {
 			return release.Release{}, lookupFound, nil, err
 		}
-		return release.Release{}, missing(exists), rs, nil
+		r, kind, others = fromList(rs, exists, s.Version)
+		return r, kind, others, nil
 	case "npm":
 		rs, found, err := npm.List(s.Name)
 		if err != nil {
@@ -322,7 +334,8 @@ func one(s spec.Spec, token string) (r release.Release, kind lookup, others []re
 		if err != nil {
 			return release.Release{}, lookupFound, nil, err
 		}
-		return release.Release{}, missing(exists), rs, nil
+		r, kind, others = fromList(rs, exists, s.Version)
+		return r, kind, others, nil
 	}
 }
 
