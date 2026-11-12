@@ -344,11 +344,14 @@ func one(s spec.Spec, token string) (r release.Release, kind lookup, others []re
 // from; a missing name sends the caller to check it, or on GitHub to the
 // token, because a private repository answers 404 there just like a missing
 // one.
-func notFound(s spec.Spec, kind lookup, others []release.Release, now time.Time, haveToken bool) string {
+func notFound(s spec.Spec, kind lookup, others []release.Release, now time.Time, haveToken, archived bool) string {
 	if kind == lookupNoVersion {
 		msg := fmt.Sprintf("%s: version not found", s)
 		if latest, ok := release.Latest(others); ok {
 			msg += "; latest is " + release.Describe(latest, now)
+		}
+		if archived {
+			return msg + "; project is archived and cannot publish new versions until unarchived"
 		}
 		return msg + fmt.Sprintf("; run `pkgwhen %s:%s` to see the versions that exist", s.Registry, s.Name)
 	}
@@ -395,12 +398,12 @@ type outcome struct {
 
 // oneOutcome answers @VERSION. A version not found prints nothing to
 // stdout, so a caller reading it never mistakes the message for the line.
-func oneOutcome(a cliArgs, r release.Release, kind lookup, others []release.Release, now time.Time, haveToken bool) outcome {
+func oneOutcome(a cliArgs, r release.Release, kind lookup, others []release.Release, now time.Time, haveToken, archived bool) outcome {
 	switch kind {
 	case lookupNoVersion:
-		return outcome{stderr: []string{notFound(a.spec, kind, others, now, haveToken)}, code: exitNoVersion}
+		return outcome{stderr: []string{notFound(a.spec, kind, others, now, haveToken, archived)}, code: exitNoVersion}
 	case lookupNoPackage:
-		return outcome{stderr: []string{notFound(a.spec, kind, others, now, haveToken)}, code: exitNoPackage}
+		return outcome{stderr: []string{notFound(a.spec, kind, others, now, haveToken, false)}, code: exitNoPackage}
 	}
 	if a.asJSON {
 		return outcome{stdout: release.JSON(a.spec.Registry, a.spec.Name, []release.Release{r}, 0, now)}
@@ -413,7 +416,7 @@ func oneOutcome(a cliArgs, r release.Release, kind lookup, others []release.Rele
 // only the table needs it said in words.
 func listOutcome(a cliArgs, rs []release.Release, found bool, now time.Time, haveToken bool) outcome {
 	if !found {
-		return outcome{stderr: []string{notFound(a.spec, lookupNoPackage, nil, now, haveToken)}, code: exitNoPackage}
+		return outcome{stderr: []string{notFound(a.spec, lookupNoPackage, nil, now, haveToken, false)}, code: exitNoPackage}
 	}
 	kept := release.Filter(rs, now, a.window)
 	outputNotes := notes(a.spec.Registry, rs, 0, now, a.window)
@@ -487,11 +490,8 @@ func run(argv []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "pkgwhen: %s: %v\n", a.spec, err)
 			return exitRegistry
 		}
-		o := oneOutcome(a, r, kind, others, now, token != "")
-		if kind == lookupNoVersion && a.spec.Registry == "pypi" && pypi.Archived(a.spec.Name) {
-			o.stderr = append(o.stderr, "PyPI project is archived. New versions cannot be published until it is unarchived. Stop retrying.")
-		}
-		return emit(o, stdout, stderr)
+		archived := kind == lookupNoVersion && a.spec.Registry == "pypi" && pypi.Archived(a.spec.Name)
+		return emit(oneOutcome(a, r, kind, others, now, token != "", archived), stdout, stderr)
 	}
 
 	rs, found, err := list(a.spec, token)
