@@ -132,7 +132,7 @@ func TestNotFound(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := notFound(tt.s, tt.kind, tt.others, now, tt.haveToken); got != tt.want {
+			if got := notFound(tt.s, tt.kind, tt.others, now, tt.haveToken, false); got != tt.want {
 				t.Errorf("notFound = %q, want %q", got, tt.want)
 			}
 		})
@@ -305,21 +305,23 @@ func TestOneOutcome(t *testing.T) {
 	r := release.Release{Version: "1.2.3", Published: now.Add(-3 * time.Hour)}
 	others := []release.Release{{Version: "1.2.0", Published: now.Add(-48 * time.Hour)}}
 	tests := []struct {
-		name string
-		json bool
-		kind lookup
-		want outcome
+		name     string
+		json     bool
+		kind     lookup
+		archived bool
+		want     outcome
 	}{
-		{"found, as a line", false, lookupFound, outcome{stdout: release.Line(r, now)}},
-		{"found, as JSON", true, lookupFound, outcome{stdout: release.JSON("pypi", "foo", []release.Release{r}, 0, now)}},
-		{"no such version", false, lookupNoVersion, outcome{stderr: []string{notFound(s, lookupNoVersion, others, now, false)}, code: exitNoVersion}},
-		{"no such version, as JSON", true, lookupNoVersion, outcome{stderr: []string{notFound(s, lookupNoVersion, others, now, false)}, code: exitNoVersion}},
-		{"no such package", false, lookupNoPackage, outcome{stderr: []string{notFound(s, lookupNoPackage, others, now, false)}, code: exitNoPackage}},
+		{"found, as a line", false, lookupFound, false, outcome{stdout: release.Line(r, now)}},
+		{"found, as JSON", true, lookupFound, false, outcome{stdout: release.JSON("pypi", "foo", []release.Release{r}, 0, now)}},
+		{"no such version", false, lookupNoVersion, false, outcome{stderr: []string{notFound(s, lookupNoVersion, others, now, false, false)}, code: exitNoVersion}},
+		{"no such version, as JSON", true, lookupNoVersion, false, outcome{stderr: []string{notFound(s, lookupNoVersion, others, now, false, false)}, code: exitNoVersion}},
+		{"no such version, archived project", false, lookupNoVersion, true, outcome{stderr: []string{"pypi:foo@1.2.3: version not found; latest is 1.2.0, published 2d ago; project is archived and cannot publish new versions until unarchived"}, code: exitNoVersion}},
+		{"no such package", false, lookupNoPackage, false, outcome{stderr: []string{notFound(s, lookupNoPackage, others, now, false, false)}, code: exitNoPackage}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			a := cliArgs{spec: s, asJSON: tt.json}
-			if got := oneOutcome(a, r, tt.kind, others, now, false); !reflect.DeepEqual(got, tt.want) {
+			if got := oneOutcome(a, r, tt.kind, others, now, false, tt.archived); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("oneOutcome = %#v, want %#v", got, tt.want)
 			}
 		})
@@ -347,7 +349,7 @@ func TestListOutcome(t *testing.T) {
 		want  outcome
 	}{
 		{"no such package", 20, false, release.Window{}, nil, false,
-			outcome{stderr: []string{notFound(s, lookupNoPackage, nil, now, false)}, code: exitNoPackage}},
+			outcome{stderr: []string{notFound(s, lookupNoPackage, nil, now, false, false)}, code: exitNoPackage}},
 		{"every version, newest first", 20, false, release.Window{}, rs, true,
 			outcome{stdout: release.Table([]release.Release{v3, v2, v1}, now)}},
 		{"a cut table says how much was cut", 1, false, release.Window{}, rs, true,
