@@ -8,6 +8,32 @@ import (
 	"github.com/iwamot/pkgwhen/internal/release"
 )
 
+func TestIndexURL(t *testing.T) {
+	if got := indexURL("My._-Project"); got != "https://pypi.org/simple/my-project/" {
+		t.Errorf("indexURL = %q", got)
+	}
+}
+
+func TestIsArchived(t *testing.T) {
+	tests := []struct {
+		name string
+		body string
+		want bool
+	}{
+		{"archived", `{"project-status":{"status":"archived"}}`, true},
+		{"active", `{"project-status":{"status":"active"}}`, false},
+		{"missing status", `{"name":"example"}`, false},
+		{"invalid JSON", `{"project-status":{"status":"archived"}`, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isArchived([]byte(tt.body)); got != tt.want {
+				t.Errorf("isArchived = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestURLs(t *testing.T) {
 	if got := ProjectURL("openai-agents"); got != "https://pypi.org/pypi/openai-agents/json" {
 		t.Errorf("ProjectURL = %q", got)

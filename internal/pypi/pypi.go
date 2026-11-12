@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/iwamot/pkgwhen/internal/release"
@@ -40,6 +41,22 @@ func ProjectURL(name string) string {
 // on its side, so 2.32 and 2.32.0 both resolve.
 func VersionURL(name, v string) string {
 	return "https://pypi.org/pypi/" + name + "/" + v + "/json"
+}
+
+var nameSeparators = regexp.MustCompile(`[-_.]+`)
+
+func indexURL(name string) string {
+	normalized := nameSeparators.ReplaceAllString(strings.ToLower(name), "-")
+	return "https://pypi.org/simple/" + normalized + "/"
+}
+
+func isArchived(data []byte) bool {
+	var index struct {
+		ProjectStatus struct {
+			Status string `json:"status"`
+		} `json:"project-status"`
+	}
+	return json.Unmarshal(data, &index) == nil && index.ProjectStatus.Status == "archived"
 }
 
 // DecodeProject turns the project document into releases. Versions with no

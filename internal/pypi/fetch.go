@@ -1,11 +1,24 @@
 package pypi
 
 import (
+	"context"
+	"net/http"
 	"time"
 
 	"github.com/iwamot/pkgwhen/internal/fetch"
 	"github.com/iwamot/pkgwhen/internal/release"
 )
+
+// Archived reports whether the Simple Index confirms that the project is
+// archived. The lookup is advisory and has its own short deadline.
+func Archived(name string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	resp, err := fetch.GetContext(ctx, indexURL(name), map[string]string{
+		"Accept": "application/vnd.pypi.simple.v1+json",
+	})
+	return err == nil && resp.Status == http.StatusOK && isArchived(resp.Body)
+}
 
 // List fetches every version of name. found is false when PyPI has no such
 // project.

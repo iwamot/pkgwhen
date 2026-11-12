@@ -88,7 +88,7 @@ Exit codes:
 // the agent's own expectations, and what exit 1 means. Which marks exist is
 // in --help and in the rows, so only what to do about one is here.
 // README.md quotes it verbatim.
-const instructionsText = "To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version on its own; it cannot be combined with the options that narrow a list. To narrow a list, use `--min-age 1d` for versions old enough to pass a one-day release age, or `--since 30d` for versions published in the last 30 days. A mark means dependency updaters usually skip that version, so a newer marked version is not a reason to expect a PR. Exit 1 means the version does not exist (yet), so rerun while it exits 1; when waiting for the first release of a new package whose name you have checked, rerun on exit 4 too; on any other exit code, stop and read stderr. On exit 0, stderr says why a table is empty or cut short.\n"
+const instructionsText = "To find which versions of a package exist and when each was published, use `pkgwhen` instead of curl and an ad-hoc script: `pkgwhen pypi:NAME`, `pkgwhen npm:NAME`, or `pkgwhen github-releases:OWNER/REPO`. Add `@VERSION` to print one version on its own; it cannot be combined with the options that narrow a list. To narrow a list, use `--min-age 1d` for versions old enough to pass a one-day release age, or `--since 30d` for versions published in the last 30 days. A mark means dependency updaters usually skip that version, so a newer marked version is not a reason to expect a PR. Exit 1 means the version does not exist (yet), so rerun while it exits 1 unless stderr says the PyPI project is archived; when waiting for the first release of a new package whose name you have checked, rerun on exit 4 too; on any other exit code, stop and read stderr. On exit 0, stderr says why a table is empty or cut short.\n"
 
 type cliArgs struct {
 	showHelp         bool
@@ -487,7 +487,11 @@ func run(argv []string, stdout, stderr io.Writer) int {
 			fmt.Fprintf(stderr, "pkgwhen: %s: %v\n", a.spec, err)
 			return exitRegistry
 		}
-		return emit(oneOutcome(a, r, kind, others, now, token != ""), stdout, stderr)
+		o := oneOutcome(a, r, kind, others, now, token != "")
+		if kind == lookupNoVersion && a.spec.Registry == "pypi" && pypi.Archived(a.spec.Name) {
+			o.stderr = append(o.stderr, "PyPI project is archived. New versions cannot be published until it is unarchived. Stop retrying.")
+		}
+		return emit(o, stdout, stderr)
 	}
 
 	rs, found, err := list(a.spec, token)

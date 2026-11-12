@@ -3,6 +3,7 @@
 package fetch
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -35,7 +36,12 @@ var client = &http.Client{Timeout: 60 * time.Second}
 // matters for npm packuments that run to megabytes. A status other than
 // 200 is returned, not treated as an error, so callers can tell 404 apart.
 func Get(url string, headers map[string]string) (Response, error) {
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	return GetContext(context.Background(), url, headers)
+}
+
+// GetContext performs a GET with the caller's cancellation and deadline.
+func GetContext(ctx context.Context, url string, headers map[string]string) (Response, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return Response{}, err
 	}
