@@ -188,7 +188,7 @@ Exit codes:
 
 ## Compatibility
 
-From 1.0, a script can rely on the following within a major version. The wording on stderr is not part of it: read the exit code and the JSON. Until 1.0, any of it can still change between releases.
+From 1.0, a script can rely on the following within a major version. The wording on stderr is not part of it: read the exit code and the JSON.
 
 | What | Promise |
 |---|---|
