@@ -114,6 +114,9 @@ func UnmarkedNote(rs []Release, now time.Time) string {
 // The nearest version is the newest one the window dropped. MinAge drops the
 // newest versions and Since the oldest, so that version is a MinAge casualty
 // whenever MinAge dropped anything, which is the half a caller can wait out.
+// With both edges set, the line names both: older versions can exist that
+// Since dropped, so saying only that none is older than MinAge would be
+// false.
 func Note(rs []Release, now time.Time, w Window) string {
 	if !w.MinAgeSet && !w.SinceSet {
 		return ""
@@ -130,6 +133,8 @@ func Note(rs []Release, now time.Time, w Window) string {
 	tooNew := nearest != nil && w.MinAgeSet && nearest.Published.After(now.Add(-w.MinAge))
 	var head string
 	switch {
+	case tooNew && w.SinceSet:
+		head = fmt.Sprintf("no version published in the last %s is older than %s", w.SinceText, w.MinAgeText)
 	case tooNew || !w.SinceSet:
 		head = fmt.Sprintf("no version is older than %s", w.MinAgeText)
 	default:
