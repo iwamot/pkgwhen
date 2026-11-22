@@ -24,12 +24,16 @@ func TestDecode(t *testing.T) {
 			"1.20.3": {"deprecated": "use 1.21"},
 			"1.21.0-beta.1": {"deprecated": ""},
 			"0.1.0": {"deprecated": true},
+			"0.2.0": {"deprecated": false},
+			"0.3.0": {"deprecated": null},
 			"9.9.9": {}
 		},
 		"time": {
 			"created": "2020-01-01T00:00:00.000Z",
 			"modified": "2026-08-29T11:02:14.000Z",
 			"0.1.0": "2020-01-01T00:00:00.000Z",
+			"0.2.0": "2020-02-01T00:00:00.000Z",
+			"0.3.0": "2020-03-01T00:00:00.000Z",
 			"1.20.2": "2026-08-20T09:00:00.000Z",
 			"1.20.3": "2026-08-29T11:02:14.000Z",
 			"1.21.0-beta.1": "2026-09-01T00:00:00.000Z",
@@ -45,6 +49,8 @@ func TestDecode(t *testing.T) {
 		{Version: "1.21.0-beta.1", Published: time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC), Prerelease: true},
 		{Version: "1.20.3", Published: time.Date(2026, 8, 29, 11, 2, 14, 0, time.UTC), Deprecated: true},
 		{Version: "1.20.2", Published: time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)},
+		{Version: "0.3.0", Published: time.Date(2020, 3, 1, 0, 0, 0, 0, time.UTC)},
+		{Version: "0.2.0", Published: time.Date(2020, 2, 1, 0, 0, 0, 0, time.UTC)},
 		{Version: "0.1.0", Published: time.Date(2020, 1, 1, 0, 0, 0, 0, time.UTC), Deprecated: true},
 	}
 	if len(got) != len(want) {
