@@ -187,7 +187,7 @@ func TestNote(t *testing.T) {
 		{"window keeps something", []Release{old, fresh}, since(30*day, "30d"), ""},
 		{"since dropped everything", []Release{old}, since(30*day, "30d"), "no version published in the last 30d; latest is 0.21.0, published 45d ago"},
 		{"min-age dropped everything", []Release{fresh}, minAge(day, "1d"), "no version is older than 1d; newest is 0.22.0, published 3h ago"},
-		{"both set, the newest dropped is too new", []Release{old, fresh}, both, "no version is older than 1d; newest is 0.22.0, published 3h ago"},
+		{"both set, the newest dropped is too new", []Release{old, fresh}, both, "no version published in the last 30d is older than 1d; newest is 0.22.0, published 3h ago"},
 		{"both set, everything is too old", []Release{old}, both, "no version published in the last 30d; latest is 0.21.0, published 45d ago"},
 		{"the named version keeps its marks", []Release{{Version: "0.21.0", Published: at(45 * day), Yanked: true}}, since(30*day, "30d"), "no version published in the last 30d; latest is 0.21.0 (yanked), published 45d ago"},
 		{"nothing to name", nil, since(30*day, "30d"), "no version published in the last 30d"},
