@@ -131,8 +131,9 @@ func TestSortOrdersNewestFirstThenByVersionDescending(t *testing.T) {
 	check(t, func(c listCase) bool {
 		got := slices.Clone(c.Releases)
 		Sort(got)
-		key := func(r Release) string { return r.Version }
-		if !slices.Equal(slices.Sorted(slices.Values(mapped(got, key))), slices.Sorted(slices.Values(mapped(c.Releases, key)))) {
+		// The same releases come out, marks and all, whatever their order.
+		byVersion := func(a, b Release) int { return strings.Compare(a.Version, b.Version) }
+		if !slices.Equal(slices.SortedFunc(slices.Values(got), byVersion), slices.SortedFunc(slices.Values(c.Releases), byVersion)) {
 			return false
 		}
 		for i := 1; i < len(got); i++ {
@@ -143,14 +144,6 @@ func TestSortOrdersNewestFirstThenByVersionDescending(t *testing.T) {
 		}
 		return true
 	})
-}
-
-func mapped[T any](rs []Release, f func(Release) T) []T {
-	out := make([]T, len(rs))
-	for i, r := range rs {
-		out[i] = f(r)
-	}
-	return out
 }
 
 func TestLimitKeepsTheFirstNAndCountsTheRest(t *testing.T) {
