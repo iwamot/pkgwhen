@@ -19,14 +19,21 @@ func propertyConfig() *quick.Config {
 
 const day = 24 * time.Hour
 
-// spans are the window lengths a case can use. Ages are drawn from one second
-// either side of each of them, so every edge of every window is exercised,
-// along with a future publish time.
+// spans are the window lengths a case can use. Most ages are drawn from one
+// second either side of each of them, so every edge of every window is
+// exercised; the rest come from between the edges or the future.
 var spans = []time.Duration{0, time.Hour, day, 3 * day, 30 * day}
 
+// between are ages that sit inside the gaps the spans leave, and past the
+// longest span, where no edge is near.
+var between = []time.Duration{2 * time.Hour, 3 * time.Hour, 2 * day, 4 * day, 5 * day, 10 * day, 45 * day, 400 * day}
+
 func randomAge(r *rand.Rand) time.Duration {
-	if r.Intn(10) == 0 {
+	switch r.Intn(10) {
+	case 0:
 		return -time.Hour
+	case 1, 2:
+		return between[r.Intn(len(between))]
 	}
 	return spans[r.Intn(len(spans))] + time.Duration(r.Intn(3)-1)*time.Second
 }
