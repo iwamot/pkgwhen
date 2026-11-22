@@ -366,24 +366,20 @@ func notFound(s spec.Spec, kind lookup, others []release.Release, now time.Time,
 	}
 }
 
-// notes lists what a successful call still owes the caller in words: why
-// the table is empty, and how much of it was cut. They go to stderr, ahead
-// of the table, so the reason reads before the rows it explains and stdout
-// carries the table alone. all is the list as the registry gave it, before
-// the window narrowed it: with nothing in it the window note would blame
-// the window for a list that was empty to begin with, so the two are
-// exclusive.
-func notes(registry string, all []release.Release, cut int, now time.Time, w release.Window) []string {
-	var out []string
+// notes lists why a successful call's table is empty, in words. They go to
+// stderr, ahead of the table, so the reason reads before the rows it
+// explains and stdout carries the table alone. all is the list as the
+// registry gave it, before the window narrowed it: with nothing in it the
+// window note would blame the window for a list that was empty to begin
+// with, so the two are exclusive.
+func notes(registry string, all []release.Release, now time.Time, w release.Window) []string {
 	if len(all) == 0 {
-		out = append(out, release.NoVersions(registry))
-	} else if note := release.Note(all, now, w); note != "" {
-		out = append(out, note)
+		return []string{release.NoVersions(registry)}
 	}
-	if cut > 0 {
-		out = append(out, release.More(cut))
+	if note := release.Note(all, now, w); note != "" {
+		return []string{note}
 	}
-	return out
+	return nil
 }
 
 // outcome is what a call leaves behind once the registry has answered: the
@@ -419,7 +415,7 @@ func listOutcome(a cliArgs, rs []release.Release, found bool, now time.Time, hav
 		return outcome{stderr: []string{notFound(a.spec, lookupNoPackage, nil, now, haveToken, false)}, code: exitNoPackage}
 	}
 	kept := release.Filter(rs, now, a.window)
-	outputNotes := notes(a.spec.Registry, rs, 0, now, a.window)
+	outputNotes := notes(a.spec.Registry, rs, now, a.window)
 	if a.unmarked {
 		if note := release.UnmarkedNote(kept, now); note != "" {
 			outputNotes = append(outputNotes, note)

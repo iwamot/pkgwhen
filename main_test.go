@@ -201,20 +201,18 @@ func TestNotes(t *testing.T) {
 		name     string
 		registry string
 		all      []release.Release
-		cut      int
 		window   release.Window
 		want     []string
 	}{
-		{"a full table says nothing", "pypi", rs, 0, release.Window{}, nil},
-		{"a cut table says how much was cut", "pypi", rs, 118, release.Window{}, []string{"118 more versions; pass -n N or --all to see them"}},
-		{"nothing to list at all", "github-releases", nil, 0, release.Window{}, []string{"no releases published (the repository may have tags but no releases)"}},
-		{"nothing to list, on the other registries", "npm", nil, 0, release.Window{}, []string{"no versions with a publish date"}},
-		{"an empty list is not blamed on the window", "pypi", nil, 0, release.Window{Since: day, SinceSet: true, SinceText: "1d"}, []string{"no versions with a publish date"}},
-		{"a window that dropped everything", "pypi", rs, 0, release.Window{MinAge: 7 * day, MinAgeSet: true, MinAgeText: "7d"}, []string{"no version is older than 7d; newest is 1.1.0, published 2h ago"}},
+		{"a list without a window says nothing", "pypi", rs, release.Window{}, nil},
+		{"nothing to list at all", "github-releases", nil, release.Window{}, []string{"no releases published (the repository may have tags but no releases)"}},
+		{"nothing to list, on the other registries", "npm", nil, release.Window{}, []string{"no versions with a publish date"}},
+		{"an empty list is not blamed on the window", "pypi", nil, release.Window{Since: day, SinceSet: true, SinceText: "1d"}, []string{"no versions with a publish date"}},
+		{"a window that dropped everything", "pypi", rs, release.Window{MinAge: 7 * day, MinAgeSet: true, MinAgeText: "7d"}, []string{"no version is older than 7d; newest is 1.1.0, published 2h ago"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := notes(tt.registry, tt.all, tt.cut, now, tt.window); !reflect.DeepEqual(got, tt.want) {
+			if got := notes(tt.registry, tt.all, now, tt.window); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("notes = %q, want %q", got, tt.want)
 			}
 		})
@@ -359,7 +357,7 @@ func TestListOutcome(t *testing.T) {
 		{"the window narrows before the count is cut", 1, true, weekOld, rs, true,
 			outcome{stdout: release.JSON("npm", "foo", []release.Release{v2}, 1, now)}},
 		{"a window that dropped everything says why", 20, false, yearOld, rs, true,
-			outcome{stdout: release.Table(nil, now), stderr: notes("npm", rs, 0, now, yearOld)}},
+			outcome{stdout: release.Table(nil, now), stderr: notes("npm", rs, now, yearOld)}},
 		{"an empty list says why, as JSON too", 20, true, release.Window{}, nil, true,
 			outcome{stdout: release.JSON("npm", "foo", nil, 0, now), stderr: []string{release.NoVersions("npm")}}},
 	}
@@ -398,7 +396,7 @@ func TestListOutcomeUnmarked(t *testing.T) {
 		{"a window left only marked versions", 20, false, recent, rs,
 			outcome{stdout: release.Table(nil, now), stderr: []string{release.UnmarkedNote([]release.Release{yanked, deprecated}, now)}}},
 		{"a window that dropped everything says why on its own", 20, false, lastHours, rs,
-			outcome{stdout: release.Table(nil, now), stderr: notes("npm", rs, 0, now, lastHours)}},
+			outcome{stdout: release.Table(nil, now), stderr: notes("npm", rs, now, lastHours)}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
