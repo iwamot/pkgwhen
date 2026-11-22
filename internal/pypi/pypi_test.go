@@ -132,6 +132,9 @@ func TestIsPrerelease(t *testing.T) {
 		{"1.0.0.dev20260906", true},
 		{"1.0rc1.post1.dev2", true},
 		{"1.0.post1.dev2", true},
+		{"1.0-1", false},
+		{"1.0rc1-1", true},
+		{"1.0-1.dev0", true},
 		{"2026.09.06", false},
 		{"not-a-version", false},
 	}
