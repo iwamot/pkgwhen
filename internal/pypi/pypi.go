@@ -116,8 +116,9 @@ func fromFiles(v string, files []file) (release.Release, bool, error) {
 }
 
 // PEP 440: release segment, then optional pre (a/b/c/rc/alpha/beta/pre/
-// preview), post, and dev segments, each with an optional separator.
-var pep440 = regexp.MustCompile(`(?i)^v?(?:\d+!)?\d+(?:\.\d+)*(?P<pre>[-._]?(?:a|b|c|rc|alpha|beta|pre|preview)[-._]?\d*)?(?:[-._]?(?:post|rev|r)[-._]?\d*)?(?P<dev>[-._]?dev[-._]?\d*)?$`)
+// preview), post, and dev segments, each with an optional separator. A post
+// segment can also be a bare "-N", the implicit post release.
+var pep440 = regexp.MustCompile(`(?i)^v?(?:\d+!)?\d+(?:\.\d+)*(?P<pre>[-._]?(?:a|b|c|rc|alpha|beta|pre|preview)[-._]?\d*)?(?:[-._]?(?:post|rev|r)[-._]?\d*|-\d+)?(?P<dev>[-._]?dev[-._]?\d*)?$`)
 
 // IsPrerelease reports whether v has a PEP 440 pre or dev segment. A version
 // that does not parse as PEP 440 at all is reported as a final release.
