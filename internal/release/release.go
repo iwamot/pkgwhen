@@ -107,9 +107,10 @@ func UnmarkedNote(rs []Release, now time.Time) string {
 // Note explains an empty result to a caller who narrowed the list with a
 // window: which edge emptied it, and the nearest version that edge dropped.
 // It returns "" when versions remain or when no window was set, so a caller
-// can print whatever comes back and nothing otherwise. A window that can
-// never match is not handled here: the flags are refused before a registry
-// is read.
+// can print whatever comes back and nothing otherwise. rs holds at least one
+// version: a registry that returned none is worded by NoVersions instead. A
+// window that can never match is not handled here either: the flags are
+// refused before a registry is read.
 //
 // The nearest version is the newest one the window dropped. MinAge drops the
 // newest versions and Since the oldest, so that version is a MinAge casualty
@@ -130,7 +131,7 @@ func Note(rs []Release, now time.Time, w Window) string {
 			nearest = &rs[i]
 		}
 	}
-	tooNew := nearest != nil && w.MinAgeSet && nearest.Published.After(now.Add(-w.MinAge))
+	tooNew := w.MinAgeSet && nearest.Published.After(now.Add(-w.MinAge))
 	var head string
 	switch {
 	case tooNew && w.SinceSet:
@@ -139,9 +140,6 @@ func Note(rs []Release, now time.Time, w Window) string {
 		head = fmt.Sprintf("no version is older than %s", w.MinAgeText)
 	default:
 		head = fmt.Sprintf("no version published in the last %s", w.SinceText)
-	}
-	if nearest == nil {
-		return head
 	}
 	label := "latest"
 	if tooNew {
@@ -184,7 +182,8 @@ func Limit(rs []Release, n int) ([]Release, int) {
 }
 
 // Age renders how long ago t was, as of now: days from one day up, hours
-// from one hour up, minutes below that. A future t reads as 0m.
+// from one hour up, minutes from one minute up, seconds below that. A
+// future t reads as 0s.
 func Age(now, t time.Time) string {
 	d := max(now.Sub(t), 0)
 	switch {
